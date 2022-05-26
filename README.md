@@ -9,3 +9,4 @@ A Java Application that archieves data from a kafka cluster to S3 and vice-versa
 4. Logic for getting between from a timeslot 
 5. fetching from S3
 6. Pushing to Another Kafka Cluster : Producer 
+7. Write Blog
