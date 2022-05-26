@@ -9,9 +9,7 @@ public class ThreadPooling extends Thread {
 
 class demo {
     public static void main(String[] args) {
-        int numProcess = Runtime.getRuntime().availableProcessors();
-        System.out.println(numProcess);
-        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ExecutorService pool = Executors.newFixedThreadPool(3);
         for (int i = 0; i < 5; i++) {
             pool.submit(new ThreadPooling());
         }
