@@ -2,7 +2,7 @@
 A Java Application that archieves data from a kafka cluster to S3 and vice-versa
 
 # Timeline
-<s>Week 1 : Intro/Induction</s>
+<s>Week 1 : Induction and Project Introduction</s>
 
 <ins>Week 2 : Fetching from Kafka Cluster (consumer groups) and separate them into tasks.</ins>
 
