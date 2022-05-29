@@ -31,6 +31,7 @@ public class Task implements Runnable {
         started = true; // Task is started by executor thread pool
         startStopLock.unlock();
 
+        log();
         for (ConsumerRecord<String, String> record : records) {
             if (stopped) break;
             // process records here
@@ -39,6 +40,10 @@ public class Task implements Runnable {
 
         finished = true;
         completion.complete(currentOffset.get());
+    }
+
+    private void log() {
+        logger.info(Thread.currentThread().getName() + " got " + records.size() + " records from partition: " + records.get(0).partition());
     }
 
     public long getCurrentOffset() {
