@@ -2,20 +2,25 @@
 A Java Application that archieves data from a kafka cluster to S3 and vice-versa
 
 # Timeline
-<s>Week 1 : Induction and Project Introduction</s>
+## Done
+#### Week 1
+* Induction 
+* Learning Java (Basics)
+* Getting to know about Kafka
 
-<ins>Week 2 : Fetching from Kafka Cluster (consumer groups) and separate them into tasks.</ins>
+## Ongoing 
 
-Week 3 : Process Tasks (Mainly Compressing)
+#### Week 2 
+* Learning about Kafka Internals
+* Learning Threads/Concurrency
+* Writing a decoupled Kafka Streamer and separating them into tasks
 
-Week 3/4 : Pushing to S3 
+## Future
 
-Week 4 :Logic for Fetching data between a given timestamp
-
-Week 5. fetching from S3
-
-Week 6. Pushing to Another Kafka Cluster : Producer 
-
-Week 7. Write Blog
-
-Week 8. Presentation 
+* Process Tasks (Mainly Compressing)
+* Pushing to S3 
+* Logic for Fetching data between a given timestamp
+* fetching from S3
+* Pushing to Another Kafka Cluster : Producer 
+* Write Blog
+* Presentation 
