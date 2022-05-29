@@ -24,7 +24,7 @@ public class Collector {
         return t;
     }
 
-    public void stop(){
+    public void stop() {
         logger.warn("Task Executor Shutting down");
         taskExecutor.shutdown();
     }
