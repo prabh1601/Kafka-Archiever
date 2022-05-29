@@ -1,6 +1,8 @@
 package com.prabh.SinkArchiever;
 
+import com.prabh.Utils.AdminController;
 import com.prabh.Utils.Task;
+import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
@@ -17,14 +19,21 @@ public class ConsumerClient {
     private final List<ConsumerThread> consumers;
     private final Builder builder;
     private final Collector collector;
+    private final AdminController admin;
 
     private ConsumerClient(Builder _builder) {
         this.builder = _builder;
         this.consumers = new ArrayList<>(builder.noOfConsumers);
         this.collector = new Collector(builder.noOfSimultaneousTask);
+        this.admin = new AdminController(builder.serverId);
     }
 
     public void startConsumers() {
+        if (!admin.checkTopic(builder.topic)) {
+            collector.stop();
+            logger.info("Consumer Group Start failed due to subscribing nonexistent topic");
+            return;
+        }
         for (int i = 0; i < builder.noOfConsumers; i++) {
             ConsumerThread c = new ConsumerThread();
             c.setConsumerName(i);
@@ -118,12 +127,6 @@ public class ConsumerClient {
         @Override
         public void run() {
             try {
-                // make sure this topic exists
-                if (!consumer.listTopics().containsKey(subscribedTopic)) {
-                    logger.error("Subscribed topic doesnt exists in cluster");
-                    return;
-                }
-
                 logger.info(String.format("%s Started", consumerName));
 
                 consumer.subscribe(List.of(subscribedTopic), this);

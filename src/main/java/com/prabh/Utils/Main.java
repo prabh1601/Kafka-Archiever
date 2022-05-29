@@ -10,14 +10,12 @@ public class Main {
                     .consumerGroup("cg")
                     .consumerCount(4)
                     .taskCount(8)
-                    .subscribedTopic("test")
+                    .subscribedTopic("lol")
                     .build();
 
             c.startConsumers();
-
-            Thread.sleep(5 * 1000);
-
-            c.stopConsumers();
+//            Thread.sleep(5 * 1000);
+//            c.stopConsumers();
 
 
     }
