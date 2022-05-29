@@ -38,6 +38,8 @@
 //import org.slf4j.Logger;
 //import org.slf4j.LoggerFactory;
 //
+//import com.google.*;
+//
 ///**
 // * User: abhay
 // * Date: 6/9/17
@@ -189,6 +191,7 @@
 //        return subscriptionTopic;
 //    }
 //
+//    // You make a kafka Consumer
 //    protected KafkaConsumer<K, V> getKafkaConsumer() {
 //        KafkaConsumer<K, V> kafkaConsumer = kafkaConsumerService.createKafkaConsumer(rawKafkaConsumerKey);
 //        kafkaConsumer.subscribe(Collections.singletonList(subscriptionTopic), this);
@@ -223,14 +226,6 @@
 //        return true;
 //    }
 //
-//    protected boolean batchSupported() {
-//        return false;
-//    }
-//
-//    protected void consumeBatch(Iterable<ConsumerRecord<K, V>> records) {
-//        throw new UnsupportedOperationException("Consume batch not supported");
-//    }
-//
 //    protected static class Consumer<Key, Value> extends BaseContextTransferableThread {
 //
 //        private final RawKafkaStreamer<Key, Value> rawKafkaStreamer;
@@ -258,21 +253,17 @@
 //
 //                        if (records != null && !records.isEmpty()) {
 //                            log(records);
-//                            if (rawKafkaStreamer.batchSupported()) {
-//                                rawKafkaStreamer.consumeBatch(records);
-//                            } else {
-//                                List<Exception> exceptions = new ArrayList<>();
-//                                StopStreamerSignalException stopStreamerSignal = null;
-//                                for (ConsumerRecord<Key, Value> record : records) {
-//                                    try {
-//                                        SprAtlasCounters.incrSampledCounter(record.topic() + ".record." + record.partition());
-//                                        consumeInternal(kafkaConsumer, record, exceptions);
-//                                    } catch (StopStreamerSignalException stopStreamerSignalException) {
-//                                        stopStreamerSignal = stopStreamerSignalException;
-//                                    }
+//                            List<Exception> exceptions = new ArrayList<>();
+//                            StopStreamerSignalException stopStreamerSignal = null;
+//                            for (ConsumerRecord<Key, Value> record : records) {
+//                                try {
+//                                    SprAtlasCounters.incrSampledCounter(record.topic() + ".record." + record.partition());
+//                                    consumeInternal(kafkaConsumer, record, exceptions);
+//                                } catch (StopStreamerSignalException stopStreamerSignalException) {
+//                                    stopStreamerSignal = stopStreamerSignalException;
 //                                }
-//                                throwOnError(exceptions, stopStreamerSignal);
 //                            }
+//                            throwOnError(exceptions, stopStreamerSignal);
 //                        }
 //                        if (!rawKafkaStreamer.commitAsync()) {
 //                            kafkaConsumer.commitSync();

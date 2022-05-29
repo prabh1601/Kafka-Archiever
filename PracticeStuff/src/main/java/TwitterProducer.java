@@ -22,7 +22,8 @@ import java.util.*;
 
 /*
  * Sample code to demonstrate the use of the Filtered Stream endpoint
- * */
+ *
+ */
 public class TwitterProducer {
     static Logger logger = LoggerFactory.getLogger(TwitterProducer.class);
     // To set your enviornment variables in your terminal run the following line:
@@ -39,7 +40,7 @@ public class TwitterProducer {
 
     /*
      * This method calls the filtered stream endpoint and streams Tweets from it
-     * */
+     */
     private static void connectStream(String bearerToken) throws IOException, URISyntaxException {
 
         HttpClient httpClient = HttpClients.custom()

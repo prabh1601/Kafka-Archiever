@@ -10,11 +10,11 @@ public class BasicConsumer {
     public static void main(String[] args) {
         Properties prop = new Properties();
         prop.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
-        prop.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "dummy-group");
+        prop.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "dumm-group");
         prop.setProperty(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         prop.setProperty(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         prop.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        prop.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "10000");
+        prop.setProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "1000000");
         KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(prop);
         consumer.subscribe(List.of("twitter_tweets"));
 

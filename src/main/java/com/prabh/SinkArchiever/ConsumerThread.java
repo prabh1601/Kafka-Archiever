@@ -1,5 +1,7 @@
 package com.prabh.SinkArchiever;
 
+import com.prabh.Utils.Task;
+
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
@@ -8,104 +10,147 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ConsumerThread implements Runnable, ConsumerRebalanceListener {
-    private Logger logger = LoggerFactory.getLogger(ConsumerThread.class.getName());
-    private KafkaConsumer<String,String> consumer;
-    private String subscribedTopic;
-    private ExecutorService taskExecutor;
-    private static Properties consumerProperties = new Properties();
-    // Will change it to runState
+public class ConsumerThread extends Thread implements ConsumerRebalanceListener {
+    private final Logger logger = LoggerFactory.getLogger(ConsumerThread.class.getName());
+    private final KafkaConsumer<String, String> consumer;
     private final AtomicBoolean stopped = new AtomicBoolean(false);
+    private final Map<TopicPartition, Task> activeTasks = new HashMap<>();
+    private final Map<TopicPartition, OffsetAndMetadata> pendingOffsets = new HashMap<>();
+    private final Collector collector;
+    private final String subscribedTopic;
+    private String consumerName;
+    private long lastCommitTime = System.currentTimeMillis();
 
-    private ConsumerThread(Builder builder) {
-
-        // set Consumer Config Properties
-        consumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, builder._BOOTSTRAP_ID);
-        consumerProperties.put(ConsumerConfig.GROUP_ID_CONFIG, builder._GROUP_ID);
-        consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, builder._AUTO_OFFSET_RESET);
+    public ConsumerThread(ConsumerClient.Builder builder) {
+        Properties consumerProperties = new Properties();
+        consumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, builder.serverId);
+        consumerProperties.put(ConsumerConfig.GROUP_ID_CONFIG, builder.groupName);
         consumerProperties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         consumerProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-
-        // Assign various objects
-        subscribedTopic = builder._SUBSCRIBED_TOPIC; // initialize subscribed topic
-        taskExecutor = Executors.newFixedThreadPool(builder._THREAD_COUNT); // initialize executor service to decouple task management
-        consumer = new KafkaConsumer<>(consumerProperties); // initialize KafkaConsumer
-
-        // Start the Thread
-        new Thread(this).start();
-    }
-
-    public static class Builder {
-        private String _BOOTSTRAP_ID;
-        private String _GROUP_ID;
-        private String _SUBSCRIBED_TOPIC;
-        private String _AUTO_OFFSET_RESET;
-        private int _THREAD_COUNT;
-
-        public Builder bootstrapServer(String serverId) {
-            this._BOOTSTRAP_ID = serverId;
-            return this;
-        }
-
-        public Builder consumerGroup(String groupName) {
-            this._GROUP_ID = groupName;
-            return this;
-        }
-
-        public Builder autoOffsetReset(String offsetPattern) {
-            this._AUTO_OFFSET_RESET = offsetPattern;
-            return this;
-        }
-
-        // TODO : make sure this topic exists
-        public Builder subscribe(String topic) {
-            this._SUBSCRIBED_TOPIC = topic;
-            return this;
-        }
-
-        public Builder threadCount(int n) {
-            this._THREAD_COUNT = n;
-            return this;
-        }
-
-        public ConsumerThread build() {
-            return new ConsumerThread(this);
-        }
+        consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        this.consumer = new KafkaConsumer<>(consumerProperties);
+        this.subscribedTopic = builder.topic;
+        this.collector = new Collector(builder.noOfSimultaneousTask);
     }
 
     @Override
     public void run() {
         try {
-
-            // Subscribe to this topic and pass this listener
-            consumer.subscribe(Collections.singleton(subscribedTopic), this);
+            consumer.subscribe(List.of(subscribedTopic), this);
             while (!stopped.get()) {
-                ConsumerRecords records = consumer.poll(Duration.ofSeconds(1));
-
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+                if (!records.isEmpty()) {
+                    handleFetchedRecords(records);
+                }
+                checkActiveTasks();
+                commitOffsets();
             }
-
         } catch (WakeupException e) {
-            logger.info("Received Shutdown signal!");
+            if (!stopped.get()) {
+                throw e;
+            }
+            logger.warn(String.format("%s Shutting down !!", consumerName));
         } finally {
             consumer.close();
         }
     }
 
-    @Override
-    public void onPartitionsRevoked(Collection<TopicPartition> collection) {
+    public void handleFetchedRecords(ConsumerRecords<String, String> records) {
+        List<TopicPartition> partitionsToPause = new ArrayList<>();
+        records.partitions().forEach(currentPartition -> {
+            List<ConsumerRecord<String, String>> partitionRecords = records.records(currentPartition);
+            Task t = collector.submit(partitionRecords);
+            partitionsToPause.add(currentPartition);
+            activeTasks.put(currentPartition, t);
+        });
+
+        consumer.pause(partitionsToPause);
+    }
+
+    public void checkActiveTasks() {
+        List<TopicPartition> partitionsToResume = new ArrayList<>();
+        activeTasks.forEach((currentPartition, task) -> {
+            if (task.isFinished()) {
+                partitionsToResume.add(currentPartition);
+            }
+            long offset = task.getCurrentOffset();
+            if (offset > 0) {
+                pendingOffsets.put(currentPartition, new OffsetAndMetadata(offset));
+            }
+        });
+
+        consumer.resume(partitionsToResume);
+    }
+
+    public void commitOffsets() {
+        try {
+            long currentTimeInMillis = System.currentTimeMillis();
+            if (currentTimeInMillis - lastCommitTime > 5000) {
+                if (!pendingOffsets.isEmpty()) {
+                    consumer.commitSync(pendingOffsets);
+                    pendingOffsets.clear();
+                }
+                lastCommitTime = currentTimeInMillis;
+            }
+        } catch (Exception e) {
+            logger.error(String.format("%s failed to commit offsets during routine offset commit", consumerName));
+        }
 
     }
 
-    @Override
-    public void onPartitionsAssigned(Collection<TopicPartition> collection) {
+    public void setName(int consumerNumber) {
+        try {
+            consumerName = "CONSUMER_THREAD-" + subscribedTopic + consumerNumber;
+            Thread.currentThread().setName(consumerName);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+        }
+    }
 
+    @Override
+    public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+
+        // 1. Fetch the tasks of revoked partitions and stop them
+        Map<TopicPartition, Task> revokedTasks = new HashMap<>();
+        partitions.forEach(currentPartition -> {
+            Task task = activeTasks.remove(currentPartition);
+            if (task != null) {
+                task.stop();
+                revokedTasks.put(currentPartition, task);
+            }
+        });
+
+        // 2. Wait for revoked tasks to complete processing current record and fetch offsets
+        revokedTasks.forEach((currentPartition, task) -> {
+            long offset = task.waitForCompletion();
+            if (offset > 0) {
+                pendingOffsets.put(currentPartition, new OffsetAndMetadata(offset));
+            }
+        });
+
+        // 3. Get the offsets of revoked partitions
+        Map<TopicPartition, OffsetAndMetadata> offsetsToCommit = new HashMap<>();
+        partitions.forEach(currentPartition -> {
+            OffsetAndMetadata offset = pendingOffsets.remove(currentPartition);
+            if (offset != null) {
+                offsetsToCommit.put(currentPartition, offset);
+            }
+        });
+
+        // 4. Commit offsets of revoked partitions
+        try {
+            consumer.commitSync(offsetsToCommit);
+        } catch (Exception e) {
+            logger.error(String.format("%s Failed to commit offset during rebalance", consumerName));
+        }
+    }
+
+    @Override
+    public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
+        consumer.resume(partitions);
     }
 }

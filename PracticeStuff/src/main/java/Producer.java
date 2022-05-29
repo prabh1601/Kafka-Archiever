@@ -15,16 +15,18 @@ public class Producer {
     public void run() {
 
         KafkaProducer<String, String> producer = new Producer().createProducerClient();
-        for (int i = 0; i < 5; i++) {
-            String topic = "topic" + Integer.toString(i);
+        int n = (int) 1e7;
+        for (int i = 0; i < n; i++) {
+            String topic = "test";
             String value = "Just trying to have a tweet %d".formatted(i);
+            final String callBackResponse = "Successfully pushed %d-th string".formatted(i);
             ProducerRecord<String, String> record = new ProducerRecord<>(topic, value);
             producer.send(record, new Callback() {
                 @Override
                 public void onCompletion(RecordMetadata recordMetadata, Exception e) {
-                    if (e == null) {
-                        logger.info("Successfully pushed data into Kafka");
-                    }
+//                    if (e == null) {
+//                        logger.info(callBackResponse);
+//                    }
                 }
             });
         }

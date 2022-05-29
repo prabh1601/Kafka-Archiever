@@ -2,7 +2,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class Main {
+    public static class Lmao {
+
+    }
+
     public static void main(String[] args) {
-        ConsumerThre
+        System.out.println(Lmao.class);
+        System.out.println(Lmao.class.getName());
     }
 }
