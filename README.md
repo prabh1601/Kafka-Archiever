@@ -1,3 +1,5 @@
+![](https://img.shields.io/badge/Made%20With-%20java-%23ED8B00.svg?style=for-the-badge&logo=java&logoColor=white)
+
 # Kafka-Archiver
 The goals of this application are two fold
 1. Archive data from Kafka clusters to S3 buckets
