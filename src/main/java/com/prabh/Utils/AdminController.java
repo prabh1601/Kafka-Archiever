@@ -28,7 +28,7 @@ public class AdminController {
         }
     }
 
-    public boolean checkTopic(String topic) {
+    public boolean exists(String topic) {
         try {
             return client.listTopics().names().get().contains(topic);
         } catch (ExecutionException | InterruptedException e) {
