@@ -37,12 +37,16 @@ public class AwsClient {
     private final Logger logger = LoggerFactory.getLogger(AwsClient.class.getName());
     Properties values = new Properties();
 
-    AwsClient() throws IOException {
-        values.load(new FileReader("/mnt/Drive1/JetBrains/Intellij/KafkaArchiver/src/main/java/com/prabh/values.properties"));
+    public AwsClient() {
+        try {
+            values.load(new FileReader("/mnt/Drive1/JetBrains/Intellij/KafkaArchiver/src/main/java/com/prabh/values.properties"));
+        } catch (IOException e) {
+            logger.error(e.getMessage(), e);
+        }
     }
 
     public void synchronousClient(File f) {
-        AWSCredentials credentials = new BasicAWSCredentials(values.getProperty("awsKeyId"),values.getProperty("awsSecretKey"));
+        AWSCredentials credentials = new BasicAWSCredentials(values.getProperty("awsKeyId"), values.getProperty("awsSecretKey"));
         AmazonS3 s3client = AmazonS3ClientBuilder
                 .standard()
                 .withCredentials(new AWSStaticCredentialsProvider(credentials))
@@ -54,7 +58,7 @@ public class AwsClient {
     public class asynchronousClient implements Runnable {
         public void run() {
             String path = "/mnt/Drive1/Test/test2.txt";
-            AwsBasicCredentials awsCreds = AwsBasicCredentials.create(values.getProperty("awxsKeyId"),values.getProperty("awsSecretKey"));
+            AwsBasicCredentials awsCreds = AwsBasicCredentials.create(values.getProperty("awsKeyId"), values.getProperty("awsSecretKey"));
             S3AsyncClient s3client = S3AsyncClient.builder()
                     .region(Region.US_EAST_2)
                     .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
@@ -95,7 +99,7 @@ public class AwsClient {
         String path = "/mnt/Drive1/Test/test2.txt";
         Region region = Region.US_EAST_2;
 
-        AwsBasicCredentials awsCreds = AwsBasicCredentials.create(values.getProperty("awsKeyId"),values.getProperty("awsSecretKey"));
+        AwsBasicCredentials awsCreds = AwsBasicCredentials.create(values.getProperty("awsKeyId"), values.getProperty("awsSecretKey"));
         S3ClientConfiguration s3ClientConfiguration = S3ClientConfiguration.builder()
                 .region(region)
                 .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
@@ -114,6 +118,10 @@ public class AwsClient {
 //        upload.completionFuture().thenRun(() -> System.out.println("Done"));
 //        CompletedUpload completedUpload = upload.completionFuture().join();
 //        System.out.println("PutObjectResponse: " + completedUpload.response());
+    }
+
+    public void uploadBatch(String dirPath) {
+
     }
 
     public void run() throws Exception {

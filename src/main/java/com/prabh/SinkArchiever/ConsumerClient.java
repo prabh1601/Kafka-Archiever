@@ -2,7 +2,6 @@ package com.prabh.SinkArchiever;
 
 import com.prabh.Utils.AdminController;
 import com.prabh.Utils.Task;
-import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
@@ -12,28 +11,28 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConsumerClient {
     private final Logger logger = LoggerFactory.getLogger(ConsumerClient.class);
     private final List<ConsumerThread> consumers;
     private final Builder builder;
-    private final Collector collector;
+    private Collector collector;
     private final AdminController admin;
 
     private ConsumerClient(Builder _builder) {
         this.builder = _builder;
         this.consumers = new ArrayList<>(builder.noOfConsumers);
-        this.collector = new Collector(builder.noOfSimultaneousTask);
         this.admin = new AdminController(builder.serverId);
     }
 
-    public void startConsumers() {
-        if (!admin.checkTopic(builder.topic)) {
-            collector.stop();
+    public void start() {
+        if (!admin.exists(builder.topic)) {
             logger.info("Consumer Group Start failed due to subscribing nonexistent topic");
             return;
         }
+        this.collector = new Collector(builder.noOfSimultaneousTask);
         for (int i = 0; i < builder.noOfConsumers; i++) {
             ConsumerThread c = new ConsumerThread();
             c.setConsumerName(i);
@@ -44,14 +43,13 @@ public class ConsumerClient {
         }
     }
 
-    public void stopConsumers() {
+    public void shutdown() {
         collector.stop();
-        for (int i = 0; i < builder.noOfConsumers; i++) {
-            synchronized (consumers) {
-                consumers.forEach(ConsumerThread::stopConsumer);
-                consumers.clear();
-            }
+        synchronized (consumers) {
+            consumers.forEach(ConsumerThread::stopConsumer);
+            consumers.clear();
         }
+        logger.info("Complete Shutdown Successful");
     }
 
     public static class Builder {
@@ -98,15 +96,14 @@ public class ConsumerClient {
         public ConsumerClient build() {
             return new ConsumerClient(this);
         }
-
     }
 
     private class ConsumerThread extends Thread implements ConsumerRebalanceListener {
         private final Logger logger = LoggerFactory.getLogger(ConsumerThread.class.getName());
         private final KafkaConsumer<String, String> consumer;
         private final AtomicBoolean stopped = new AtomicBoolean(false);
-        private final Map<TopicPartition, Task> activeTasks = new HashMap<>();
         private final Map<TopicPartition, OffsetAndMetadata> pendingOffsets = new HashMap<>();
+        private final ConcurrentHashMap<TopicPartition, Task> activeTasks = new ConcurrentHashMap<>();
         private final String subscribedTopic;
         private String consumerName;
         private long lastCommitTime = System.currentTimeMillis();
@@ -119,7 +116,7 @@ public class ConsumerClient {
             consumerProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
             consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-            consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 100000);
+            consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1000000);
             this.consumer = new KafkaConsumer<>(consumerProperties);
             this.subscribedTopic = builder.topic;
         }
@@ -143,9 +140,9 @@ public class ConsumerClient {
                 if (!stopped.get()) {
                     throw e;
                 }
-                logger.warn(String.format("%s Shutting down !!", consumerName));
             } finally {
                 consumer.close();
+                logger.warn(String.format("%s Shutdown successfully", consumerName));
             }
         }
 
@@ -172,7 +169,7 @@ public class ConsumerClient {
                     pendingOffsets.put(currentPartition, new OffsetAndMetadata(offset));
                 }
             });
-
+            partitionsToResume.forEach(activeTasks::remove);
             consumer.resume(partitionsToResume);
         }
 
@@ -190,6 +187,20 @@ public class ConsumerClient {
                 logger.error("{} failed to commit offsets during routine offset commit", consumerName);
             }
 
+        }
+
+        void waitForTaskCompletion() {
+            List<TopicPartition> partitionsToResume = new ArrayList<>();
+            activeTasks.forEach((currentPartition, task) -> {
+                task.waitForCompletion();
+                partitionsToResume.add(currentPartition);
+                long offset = task.getCurrentOffset();
+                if (offset > 0) {
+                    pendingOffsets.put(currentPartition, new OffsetAndMetadata(offset));
+                }
+            });
+            partitionsToResume.forEach(activeTasks::remove);
+            consumer.resume(partitionsToResume);
         }
 
         public void log(ConsumerRecords<String, String> records) {
@@ -241,7 +252,7 @@ public class ConsumerClient {
             try {
                 consumer.commitSync(offsetsToCommit);
             } catch (Exception e) {
-                logger.error(String.format("%s Failed to commit offset during rebalance", consumerName));
+                logger.error("{} Failed to commit offset during re-balance", consumerName);
             }
         }
 
