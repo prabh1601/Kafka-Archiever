@@ -20,12 +20,13 @@ public class Batcher implements Runnable {
         File newDir = new File(newDirPath);
         oldDir.renameTo(newDir);
         oldDir.mkdir();
+
+        runningClient.start();
+        s3client.uploadBatch(newDirPath);
         File[] files = newDir.listFiles();
         for (File file : files) {
             file.delete();
         }
-        runningClient.start();
-//        s3client.uploadBatch(newDirPath); -> Still need to implement this
         newDir.delete();
     }
 }

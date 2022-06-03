@@ -20,6 +20,6 @@ public class Main {
 
         c.start();
         ScheduledExecutorService batchExecutor = Executors.newScheduledThreadPool(1);
-        batchExecutor.scheduleWithFixedDelay(new Batcher(c), 10, 10, TimeUnit.SECONDS);
+        batchExecutor.scheduleWithFixedDelay(new Batcher(c), 15, 30, TimeUnit.SECONDS);
     }
 }

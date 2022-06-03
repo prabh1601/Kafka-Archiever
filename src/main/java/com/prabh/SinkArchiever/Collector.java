@@ -1,12 +1,9 @@
 package com.prabh.SinkArchiever;
 
-import com.amazonaws.services.customerprofiles.model.Batch;
-import com.prabh.Utils.AwsClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.util.List;
 import java.util.concurrent.*;
 
