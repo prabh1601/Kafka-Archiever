@@ -3,15 +3,17 @@ package com.prabh.SinkArchiever;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.connect.connector.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -88,7 +90,7 @@ public class WriterClient {
     }
 
     private class WritingTask implements Runnable {
-        private final Logger logger = LoggerFactory.getLogger(Task.class.getName());
+        private final Logger logger = LoggerFactory.getLogger(WritingTask.class.getName());
         private final List<ConsumerRecord<String, String>> records;
         private volatile boolean stopped = false;
         private volatile boolean started = false;
@@ -97,6 +99,7 @@ public class WriterClient {
         private final ReentrantLock startStopLock = new ReentrantLock();
         private final CompletableFuture<Long> completion = new CompletableFuture<>();
         private final int chunkSize = 10;
+
         public WritingTask(List<ConsumerRecord<String, String>> _records) {
             this.records = _records;
         }
@@ -110,10 +113,11 @@ public class WriterClient {
 
             log();
             try {
-                final String writePath = "/mnt/Drive1/Kafka-Dump/";
                 final int partition = records.get(0).partition();
                 final String topic = records.get(0).topic();
-                String fileName = writePath + "/topic" + partition + ".txt";
+                final String writeDir = "/mnt/Drive1/Kafka-Dump/" + topic;
+                new File(writeDir).mkdirs();
+                String fileName = writeDir + "/" + partition + ".txt";
                 BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
                 for (ConsumerRecord<String, String> record : records) {
                     if (stopped) break;
@@ -123,8 +127,8 @@ public class WriterClient {
 
                 writer.close();
                 long fileSizeInMB = Files.size(Paths.get(fileName)) / (1024 * 1024);
-                if(fileSizeInMB > chunkSize) {
-                    stageForUpload(fileName);
+                if (fileSizeInMB > chunkSize) {
+                    UploadAndRotateShift(fileName, topic, partition);
                 }
             } catch (IOException e) {
                 logger.error("Writing files abrupted");
@@ -138,8 +142,17 @@ public class WriterClient {
             logger.info(Thread.currentThread().getName() + " got " + records.size() + " records from partition " + records.get(0).partition());
         }
 
-        void stageForUpload(String fileName) {
-            uploader.upload(fileName);
+        void UploadAndRotateShift(String fileName, String topic, int partition) {
+            File f_old = new File(fileName);
+            File f_new = new File(f_old.getParent() + "/" + partition + "-upload.txt");
+            f_old.renameTo(f_new);
+            ZonedDateTime zdt = ZonedDateTime
+                    .now(ZoneId.of("Asia/Kolkata"));
+            String key = "topics/" + topic + "/year=" + zdt.getYear() + "/month=" + zdt.getMonth() + "/day="
+                    + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + System.currentTimeMillis() + "-" + partition;
+            System.out.println(key);
+            uploader.upload(f_new, key);
+            f_new.delete();
         }
 
         public long getCurrentOffset() {
