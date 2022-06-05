@@ -19,19 +19,21 @@ public class UploaderClient {
         uploadExecutor = Executors.newFixedThreadPool(noOfSimultaneousuploads);
     }
 
-    public void upload(File file) {
-        uploadExecutor.submit(new UploadingTask(file));
+    public void upload(File file, String key) {
+        uploadExecutor.submit(new UploadingTask(file, key));
     }
 
     private class UploadingTask implements Runnable {
         private final File file;
+        private final String key;
 
-        public UploadingTask(File _file) {
+        public UploadingTask(File _file, String _key) {
             this.file = _file;
+            this.key = _key;
         }
 
         public void run() {
-            s3Client.upload(file);
+            s3Client.upload(file, key);
         }
     }
 
