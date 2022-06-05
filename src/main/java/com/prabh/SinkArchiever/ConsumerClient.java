@@ -1,7 +1,6 @@
 package com.prabh.SinkArchiever;
 
 import com.prabh.Utils.AdminController;
-import com.prabh.Utils.Task;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
@@ -11,15 +10,14 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConsumerClient {
     private final Logger logger = LoggerFactory.getLogger(ConsumerClient.class);
     private final List<ConsumerThread> consumers;
     private final Builder builder;
-    private Collector collector;
     private final AdminController admin;
+    private WriterClient writer;
 
     private ConsumerClient(Builder _builder) {
         this.builder = _builder;
@@ -32,10 +30,10 @@ public class ConsumerClient {
             logger.info("Consumer Group Start failed due to subscribing nonexistent topic");
             return;
         }
-        this.collector = new Collector(builder.noOfSimultaneousTask);
+        this.writer = new WriterClient(builder.noOfConsumers, builder.noOfSimultaneousTask);
         for (int i = 0; i < builder.noOfConsumers; i++) {
             ConsumerThread c = new ConsumerThread();
-            c.setConsumerName(i);
+            c.setConsumerDetails(i);
             c.start();
             synchronized (consumers) {
                 consumers.add(c);
@@ -44,7 +42,7 @@ public class ConsumerClient {
     }
 
     public void shutdown() {
-        collector.stop();
+        writer.stop();
         synchronized (consumers) {
             consumers.forEach(ConsumerThread::stopConsumer);
             consumers.clear();
@@ -103,9 +101,9 @@ public class ConsumerClient {
         private final KafkaConsumer<String, String> consumer;
         private final AtomicBoolean stopped = new AtomicBoolean(false);
         private final Map<TopicPartition, OffsetAndMetadata> pendingOffsets = new HashMap<>();
-        private final ConcurrentHashMap<TopicPartition, Task> activeTasks = new ConcurrentHashMap<>();
         private final String subscribedTopic;
         private String consumerName;
+        private int consumerNo;
         private long lastCommitTime = System.currentTimeMillis();
 
         public ConsumerThread() {
@@ -150,9 +148,8 @@ public class ConsumerClient {
             List<TopicPartition> partitionsToPause = new ArrayList<>();
             records.partitions().forEach(currentPartition -> {
                 List<ConsumerRecord<String, String>> partitionRecords = records.records(currentPartition);
-                Task t = collector.submit(partitionRecords);
+                writer.submit(consumerNo, currentPartition, partitionRecords);
                 partitionsToPause.add(currentPartition);
-                activeTasks.put(currentPartition, t);
             });
 
             consumer.pause(partitionsToPause);
@@ -160,16 +157,11 @@ public class ConsumerClient {
 
         public void checkActiveTasks() {
             List<TopicPartition> partitionsToResume = new ArrayList<>();
-            activeTasks.forEach((currentPartition, task) -> {
-                if (task.isFinished()) {
-                    partitionsToResume.add(currentPartition);
-                }
-                long offset = task.getCurrentOffset();
-                if (offset > 0) {
-                    pendingOffsets.put(currentPartition, new OffsetAndMetadata(offset));
-                }
+            Map<TopicPartition, OffsetAndMetadata> doneTasks = writer.checkActiveTasks(consumerNo);
+            doneTasks.forEach((currentPartition, offsets) -> {
+                partitionsToResume.add(currentPartition);
+                pendingOffsets.put(currentPartition, offsets);
             });
-            partitionsToResume.forEach(activeTasks::remove);
             consumer.resume(partitionsToResume);
         }
 
@@ -189,26 +181,13 @@ public class ConsumerClient {
 
         }
 
-        void waitForTaskCompletion() {
-            List<TopicPartition> partitionsToResume = new ArrayList<>();
-            activeTasks.forEach((currentPartition, task) -> {
-                task.waitForCompletion();
-                partitionsToResume.add(currentPartition);
-                long offset = task.getCurrentOffset();
-                if (offset > 0) {
-                    pendingOffsets.put(currentPartition, new OffsetAndMetadata(offset));
-                }
-            });
-            partitionsToResume.forEach(activeTasks::remove);
-            consumer.resume(partitionsToResume);
-        }
-
         public void log(ConsumerRecords<String, String> records) {
             logger.info("{} Fetched {} records constituting of {}", consumerName, records.count(), records.partitions());
         }
 
-        private void setConsumerName(int consumerNumber) {
+        private void setConsumerDetails(int consumerNumber) {
             this.consumerName = "CONSUMER_THREAD-" + this.subscribedTopic + "-" + consumerNumber;
+            this.consumerNo = consumerNumber;
             Thread.currentThread().setName(this.consumerName);
         }
 
@@ -220,24 +199,10 @@ public class ConsumerClient {
 
         @Override
         public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
+            writer.handleRevokedPartitionTasks(consumerNo, partitions);
 
-            // 1. Fetch the tasks of revoked partitions and stop them
-            Map<TopicPartition, Task> revokedTasks = new HashMap<>();
-            partitions.forEach(currentPartition -> {
-                Task task = activeTasks.remove(currentPartition);
-                if (task != null) {
-                    task.stop();
-                    revokedTasks.put(currentPartition, task);
-                }
-            });
-
-            // 2. Wait for revoked tasks to complete processing current record and fetch offsets
-            revokedTasks.forEach((currentPartition, task) -> {
-                long offset = task.waitForCompletion();
-                if (offset > 0) {
-                    pendingOffsets.put(currentPartition, new OffsetAndMetadata(offset));
-                }
-            });
+            Map<TopicPartition, OffsetAndMetadata> revokedPartitionOffsets = writer.handleRevokedPartitionTasks(consumerNo, partitions);
+            pendingOffsets.putAll(revokedPartitionOffsets);
 
             // 3. Get the offsets of revoked partitions
             Map<TopicPartition, OffsetAndMetadata> offsetsToCommit = new HashMap<>();
@@ -260,7 +225,5 @@ public class ConsumerClient {
         public void onPartitionsAssigned(Collection<TopicPartition> partitions) {
             consumer.resume(partitions);
         }
-
     }
-
 }
