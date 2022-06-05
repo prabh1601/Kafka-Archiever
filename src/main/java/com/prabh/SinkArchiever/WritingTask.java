@@ -2,6 +2,7 @@ package com.prabh.Utils;
 
 import com.prabh.SinkArchiever.Collector;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.connect.connector.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 
-public class Task implements Runnable {
+public class WritingTask implements Runnable {
     private final Logger logger = LoggerFactory.getLogger(Task.class.getName());
     private final List<ConsumerRecord<String, String>> records;
     private volatile boolean stopped = false;
@@ -23,7 +24,7 @@ public class Task implements Runnable {
     private final ReentrantLock startStopLock = new ReentrantLock();
     private final CompletableFuture<Long> completion = new CompletableFuture<>();
 
-    public Task(List<ConsumerRecord<String, String>> _records) {
+    public WritingTask(List<ConsumerRecord<String, String>> _records) {
         this.records = _records;
     }
 
@@ -43,8 +44,7 @@ public class Task implements Runnable {
             BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
             for (ConsumerRecord<String, String> record : records) {
                 if (stopped) break;
-                // Process this record
-                writer.write(record.value() + "\n");
+                writer.write(record.timestamp() + " - " + record.value() + "\n");
                 currentOffset.set(record.offset() + 1);
             }
 
