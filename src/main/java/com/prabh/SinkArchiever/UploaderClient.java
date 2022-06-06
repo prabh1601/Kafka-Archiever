@@ -7,9 +7,10 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class UploaderClient {
-    private final Logger logger = LoggerFactory.getLogger(UploaderClient.class.getName());
+    private final Logger logger = LoggerFactory.getLogger(UploaderClient.class);
     private final ExecutorService uploadExecutor;
     private final int noOfSimultaneousuploads;
     private final AwsClient s3Client = new AwsClient();
@@ -29,7 +30,13 @@ public class UploaderClient {
     }
 
     public void shutdown() {
-
+        uploadExecutor.shutdown();
+        try {
+            uploadExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch(InterruptedException e){
+            logger.error(e.getMessage(), e);
+        }
+        logger.warn("Uploader Client Shutdown complete");
     }
 
     private class UploadingTask implements Runnable {

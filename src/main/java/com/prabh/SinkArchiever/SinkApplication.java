@@ -4,10 +4,8 @@ import com.prabh.Utils.AdminController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.CountDownLatch;
-
 public class SinkApplication {
-    private final Logger logger = LoggerFactory.getLogger(SinkApplication.class.getName());
+    private final Logger logger = LoggerFactory.getLogger(SinkApplication.class);
     private final ConsumerClient consumerClient;
     private final WriterClient writerClient;
     private final UploaderClient uploaderClient;
@@ -26,13 +24,11 @@ public class SinkApplication {
         // Creating Writer Client
         this.writerClient = new WriterClient(builder.noOfConsumers, builder.noOfSimultaneousTask, uploaderClient);
         // Creating Consumer Client
-        CountDownLatch latch = new CountDownLatch(builder.noOfConsumers);
-        this.consumerClient = new ConsumerClient(latch, writerClient, builder.noOfConsumers, builder.groupName,
+        this.consumerClient = new ConsumerClient(writerClient, builder.noOfConsumers, builder.groupName,
                 builder.serverId, builder.topic);
-        // Creating adminController
     }
 
-    public boolean validateConfig(Builder builder) {
+    private boolean validateConfig(Builder builder) {
         // Validate Topic
         if (!adminController.exists(builder.topic)) {
             logger.error("Build Failed in attempt of subscribing non-existing topic");

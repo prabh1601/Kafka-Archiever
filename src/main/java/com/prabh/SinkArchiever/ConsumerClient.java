@@ -22,12 +22,12 @@ public class ConsumerClient {
     private final String serverId;
     private final String subscribedTopic;
 
-    ConsumerClient(CountDownLatch _latch, WriterClient _writer, int _noOfConsumers, String _groupName, String _serverId, String _topic) {
-        this.runningStatus = _latch;
+    ConsumerClient(WriterClient _writer, int _noOfConsumers, String _groupName, String _serverId, String _topic) {
         this.writer = _writer;
         this.groupName = _groupName;
         this.serverId = _serverId;
         this.noOfConsumers = _noOfConsumers;
+        this.runningStatus = new CountDownLatch(this.noOfConsumers);
         this.consumers = new ArrayList<>(_noOfConsumers);
         this.subscribedTopic = _topic;
     }
@@ -53,7 +53,7 @@ public class ConsumerClient {
         } catch (InterruptedException e) {
             logger.error(e.getMessage(), e);
         }
-        logger.info("Complete Shutdown Successful");
+        logger.warn("Consumer Client Shutdown Complete");
     }
 
     private class ConsumerThread extends Thread implements ConsumerRebalanceListener {
@@ -80,7 +80,7 @@ public class ConsumerClient {
         @Override
         public void run() {
             try {
-                logger.info(String.format("%s Started", consumerName));
+                logger.info("{} Started", consumerName);
 
                 consumer.subscribe(List.of(subscribedTopic), this);
                 while (!stopped.get()) {
@@ -121,7 +121,9 @@ public class ConsumerClient {
                 partitionsToResume.add(currentPartition);
                 pendingOffsets.put(currentPartition, offsets);
             });
-            consumer.resume(partitionsToResume);
+            if (!partitionsToResume.isEmpty()) {
+                consumer.resume(partitionsToResume);
+            }
         }
 
         public void commitOffsets() {
@@ -144,7 +146,7 @@ public class ConsumerClient {
         }
 
         private void setConsumerDetails(int consumerNumber) {
-            this.consumerName = "CONSUMER_THREAD-" + subscribedTopic + "-" + consumerNumber;
+            this.consumerName = "CONSUMER_THREAD-" + subscribedTopic + "-" + (consumerNumber + 1);
             this.consumerNo = consumerNumber;
             Thread.currentThread().setName(this.consumerName);
         }

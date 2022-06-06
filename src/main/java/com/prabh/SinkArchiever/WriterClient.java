@@ -5,7 +5,6 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.transfer.s3.Upload;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -21,7 +20,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class WriterClient {
-    private final Logger logger = LoggerFactory.getLogger(WriterClient.class.getName());
+    private final Logger logger = LoggerFactory.getLogger(WriterClient.class);
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
     private final UploaderClient uploader;
@@ -81,13 +80,13 @@ public class WriterClient {
     }
 
     public void shutdown() {
-        logger.warn("WritingTask Executor Shutting down");
         taskExecutor.shutdown();
         try {
             taskExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         } catch (InterruptedException e) {
             logger.error(e.getMessage(), e);
         }
+        logger.warn("Writing Client Shutdown complete");
     }
 
     private class WritingTask implements Runnable {
@@ -144,7 +143,6 @@ public class WriterClient {
                     + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + System.currentTimeMillis() + "-" + partition;
             File f_old = new File(fileName);
             File f_new = new File(f_old.getParent() + "/" + partition + "-" + System.currentTimeMillis() + ".txt");
-            System.out.println(f_new.getAbsolutePath());
             boolean renameStatus = f_old.renameTo(f_new);
             if (!renameStatus) {
                 logger.error("{} failed to stage for upload due to renaming failure", f_old.getName());
