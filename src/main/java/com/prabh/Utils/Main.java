@@ -1,20 +1,19 @@
 package com.prabh.Utils;
 
-import com.prabh.SinkArchiever.ConsumerClient;
+import com.prabh.SinkArchiever.SinkApplication;
 
-// Template UseCase of Consumer Client
+// Template UseCase of SinkApplication
 public class Main {
     public static void main(String[] args) throws InterruptedException {
-        ConsumerClient c = new ConsumerClient.Builder()
+        SinkApplication app = new SinkApplication.Builder()
                 .bootstrapServer("localhost:9092")
                 .consumerGroup("cg")
                 .consumerCount(3)
-                .taskCount(12)
                 .subscribedTopic("test")
+                .writeTaskCount(10)
                 .build();
 
-        c.start();
-
+        app.start();
 
     }
 }
