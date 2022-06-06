@@ -6,30 +6,28 @@ The goals of this application are two fold
 2. Retrieve data from S3 that belongs in between the input timeperiod and push it to Kafka cluster
 
 
-
-# Timeline
-## Done
-#### Week 1
+## Timeline
+##### Week 1
 * Induction 
 * Learning Java (Basics)
 * Getting to know about Kafka
 
-#### Week 2 
+##### Week 2 
 * Learning about Kafka Internals
 * Learning Threads/Concurrency
 * Writing a decoupled Kafka Streamer and separating them into tasks
 
-## Week 3 
+##### Week 3 
 * Try different models to push data to s3
 * Implement individual services/client structures for more streamline workflow of the application
 
-## Ongoing (Week 4)
+##### Ongoing (Week 4)
 * Handle upload process better and put constraints to potential memory overflow
 * Incoporate various compression and upload options ?
 
-## Future
-* Logic for Fetching data between a given timestamp
+##### Future
+* Implement Fetching data between a given
 * fetching from S3
 * Pushing to Another Kafka Cluster : Producer 
-* Write Blog
-* Presentation 
+* (week 7) Write Blog
+* (week 8) Presentation 
