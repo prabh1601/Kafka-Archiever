@@ -4,7 +4,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.transfer.s3.*;
 
 import java.io.*;
@@ -24,7 +27,7 @@ public class AwsClient {
         } catch (IOException e) {
             logger.error(e.getMessage(), e);
         }
-        initConnection();
+//        initConnection();
     }
 
     public void initConnection() {
@@ -40,6 +43,21 @@ public class AwsClient {
         s3tm = S3TransferManager.builder()
                 .s3ClientConfiguration(s3ClientConfiguration)
                 .build();
+    }
+
+    public void uploadObject(File file, String key) {
+        Region region = Region.AP_SOUTH_1;
+        S3Client s3 = S3Client.builder()
+                .region(region)
+                .build();
+
+        PutObjectRequest objectRequest = PutObjectRequest.builder()
+                .bucket(values.getProperty("bucketName"))
+                .key(key)
+                .build();
+
+        s3.putObject(objectRequest, RequestBody.fromFile(file));
+        logger.info("Successfully uploaded file : {}", file.getName());
     }
 
     public void upload(File file, String key) {
