@@ -14,13 +14,22 @@ public class UploaderClient {
     private final int noOfSimultaneousuploads;
     private final AwsClient s3Client = new AwsClient();
 
-    public UploaderClient() {
+    UploaderClient() {
         this.noOfSimultaneousuploads = 3;
+        uploadExecutor = Executors.newFixedThreadPool(noOfSimultaneousuploads);
+    }
+
+    public UploaderClient(int _noOfSimultaneousUploads) {
+        this.noOfSimultaneousuploads = _noOfSimultaneousUploads;
         uploadExecutor = Executors.newFixedThreadPool(noOfSimultaneousuploads);
     }
 
     public void upload(File file, String key) {
         uploadExecutor.submit(new UploadingTask(file, key));
+    }
+
+    public void shutdown() {
+
     }
 
     private class UploadingTask implements Runnable {
@@ -33,7 +42,11 @@ public class UploaderClient {
         }
 
         public void run() {
-            s3Client.upload(file, key);
+            logger.info("{} Started uploading with key {}", file.getName(), key);
+            s3Client.uploadObject(file, key);
+            if (!file.delete()) {
+                logger.error("{} Deletion failed", file.getName());
+            }
         }
     }
 

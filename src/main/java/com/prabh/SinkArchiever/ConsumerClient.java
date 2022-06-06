@@ -1,6 +1,5 @@
 package com.prabh.SinkArchiever;
 
-import com.prabh.Utils.AdminController;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
@@ -10,28 +9,31 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConsumerClient {
     private final Logger logger = LoggerFactory.getLogger(ConsumerClient.class);
     private final List<ConsumerThread> consumers;
-    private final Builder builder;
-    private final AdminController admin;
-    private WriterClient writer;
+    private final WriterClient writer;
+    private final CountDownLatch runningStatus;
+    private final int noOfConsumers;
+    private final String groupName;
+    private final String serverId;
+    private final String subscribedTopic;
 
-    private ConsumerClient(Builder _builder) {
-        this.builder = _builder;
-        this.consumers = new ArrayList<>(builder.noOfConsumers);
-        this.admin = new AdminController(builder.serverId);
+    ConsumerClient(CountDownLatch _latch, WriterClient _writer, int _noOfConsumers, String _groupName, String _serverId, String _topic) {
+        this.runningStatus = _latch;
+        this.writer = _writer;
+        this.groupName = _groupName;
+        this.serverId = _serverId;
+        this.noOfConsumers = _noOfConsumers;
+        this.consumers = new ArrayList<>(_noOfConsumers);
+        this.subscribedTopic = _topic;
     }
 
     public void start() {
-        if (!admin.exists(builder.topic)) {
-            logger.info("Consumer Group Start failed due to subscribing nonexistent topic");
-            return;
-        }
-        this.writer = new WriterClient(builder.noOfConsumers, builder.noOfSimultaneousTask);
-        for (int i = 0; i < builder.noOfConsumers; i++) {
+        for (int i = 0; i < noOfConsumers; i++) {
             ConsumerThread c = new ConsumerThread();
             c.setConsumerDetails(i);
             c.start();
@@ -42,58 +44,16 @@ public class ConsumerClient {
     }
 
     public void shutdown() {
-        writer.stop();
         synchronized (consumers) {
             consumers.forEach(ConsumerThread::stopConsumer);
             consumers.clear();
         }
+        try {
+            runningStatus.await();
+        } catch (InterruptedException e) {
+            logger.error(e.getMessage(), e);
+        }
         logger.info("Complete Shutdown Successful");
-    }
-
-    public static class Builder {
-        public String serverId;
-        public int noOfConsumers;
-        public int noOfSimultaneousTask;
-        public String groupName;
-        public String topic;
-
-        public Builder() {
-
-        }
-
-        // Server to connect
-        public Builder bootstrapServer(String _serverId) {
-            this.serverId = _serverId;
-            return this;
-        }
-
-        // Name of Consumer Group for the service
-        public Builder consumerGroup(String _groupName) {
-            this.groupName = _groupName;
-            return this;
-        }
-
-        // No of Consumers in the consumer Group
-        public Builder consumerCount(int _noOfConsumers) {
-            this.noOfConsumers = _noOfConsumers;
-            return this;
-        }
-
-        // No of threads for ExecutorService
-        public Builder taskCount(int _noOfSimultaneousTask) {
-            this.noOfSimultaneousTask = _noOfSimultaneousTask;
-            return this;
-        }
-
-        // Make sure this topic Exists
-        public Builder subscribedTopic(String _topic) {
-            this.topic = _topic;
-            return this;
-        }
-
-        public ConsumerClient build() {
-            return new ConsumerClient(this);
-        }
     }
 
     private class ConsumerThread extends Thread implements ConsumerRebalanceListener {
@@ -101,22 +61,20 @@ public class ConsumerClient {
         private final KafkaConsumer<String, String> consumer;
         private final AtomicBoolean stopped = new AtomicBoolean(false);
         private final Map<TopicPartition, OffsetAndMetadata> pendingOffsets = new HashMap<>();
-        private final String subscribedTopic;
         private String consumerName;
         private int consumerNo;
         private long lastCommitTime = System.currentTimeMillis();
 
         public ConsumerThread() {
             Properties consumerProperties = new Properties();
-            consumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, builder.serverId);
-            consumerProperties.put(ConsumerConfig.GROUP_ID_CONFIG, builder.groupName);
+            consumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, serverId);
+            consumerProperties.put(ConsumerConfig.GROUP_ID_CONFIG, groupName);
             consumerProperties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             consumerProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
             consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
             consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1000000);
             this.consumer = new KafkaConsumer<>(consumerProperties);
-            this.subscribedTopic = builder.topic;
         }
 
         @Override
@@ -140,7 +98,8 @@ public class ConsumerClient {
                 }
             } finally {
                 consumer.close();
-                logger.warn(String.format("%s Shutdown successfully", consumerName));
+                runningStatus.countDown();
+                logger.warn("{} Shutdown Successfully", consumerName);
             }
         }
 
@@ -178,7 +137,6 @@ public class ConsumerClient {
             } catch (Exception e) {
                 logger.error("{} failed to commit offsets during routine offset commit", consumerName);
             }
-
         }
 
         public void log(ConsumerRecords<String, String> records) {
@@ -186,7 +144,7 @@ public class ConsumerClient {
         }
 
         private void setConsumerDetails(int consumerNumber) {
-            this.consumerName = "CONSUMER_THREAD-" + this.subscribedTopic + "-" + consumerNumber;
+            this.consumerName = "CONSUMER_THREAD-" + subscribedTopic + "-" + consumerNumber;
             this.consumerNo = consumerNumber;
             Thread.currentThread().setName(this.consumerName);
         }
@@ -199,7 +157,6 @@ public class ConsumerClient {
 
         @Override
         public void onPartitionsRevoked(Collection<TopicPartition> partitions) {
-            writer.handleRevokedPartitionTasks(consumerNo, partitions);
 
             Map<TopicPartition, OffsetAndMetadata> revokedPartitionOffsets = writer.handleRevokedPartitionTasks(consumerNo, partitions);
             pendingOffsets.putAll(revokedPartitionOffsets);

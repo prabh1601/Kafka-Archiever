@@ -5,6 +5,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.transfer.s3.Upload;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -23,9 +24,10 @@ public class WriterClient {
     private final Logger logger = LoggerFactory.getLogger(WriterClient.class.getName());
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    private final UploaderClient uploader = new UploaderClient();
+    private final UploaderClient uploader;
 
-    public WriterClient(int noOfConsumers, int taskPoolSize) {
+    WriterClient(int noOfConsumers, int taskPoolSize, UploaderClient _uploader) {
+        this.uploader = _uploader;
         this.taskExecutor = Executors.newFixedThreadPool(taskPoolSize);
         activeTasks = new ArrayList<>(noOfConsumers);
         for (int i = 0; i < noOfConsumers; i++) {
@@ -33,11 +35,10 @@ public class WriterClient {
         }
     }
 
-    public WritingTask submit(int consumer, TopicPartition partition, List<ConsumerRecord<String, String>> records) {
+    public void submit(int consumer, TopicPartition partition, List<ConsumerRecord<String, String>> records) {
         WritingTask t = new WritingTask(records);
         taskExecutor.submit(t);
         activeTasks.get(consumer).put(partition, t);
-        return t;
     }
 
     public Map<TopicPartition, OffsetAndMetadata> checkActiveTasks(int consumer) {
@@ -79,8 +80,8 @@ public class WriterClient {
         return revokedPartitionOffsets;
     }
 
-    public void stop() {
-        logger.warn("Task Executor Shutting down");
+    public void shutdown() {
+        logger.warn("WritingTask Executor Shutting down");
         taskExecutor.shutdown();
         try {
             taskExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
@@ -111,7 +112,6 @@ public class WriterClient {
             started = true; // Task is started by executor thread pool
             startStopLock.unlock();
 
-            log();
             try {
                 final int partition = records.get(0).partition();
                 final String topic = records.get(0).topic();
@@ -138,21 +138,18 @@ public class WriterClient {
             completion.complete(currentOffset.get());
         }
 
-        private void log() {
-            logger.info(Thread.currentThread().getName() + " got " + records.size() + " records from partition " + records.get(0).partition());
-        }
-
         void UploadAndRotateShift(String fileName, String topic, int partition) {
-            File f_old = new File(fileName);
-            File f_new = new File(f_old.getParent() + "/" + partition + "-upload.txt");
-            f_old.renameTo(f_new);
-            ZonedDateTime zdt = ZonedDateTime
-                    .now(ZoneId.of("Asia/Kolkata"));
+            ZonedDateTime zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
             String key = "topics/" + topic + "/year=" + zdt.getYear() + "/month=" + zdt.getMonth() + "/day="
                     + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + System.currentTimeMillis() + "-" + partition;
-            System.out.println(key);
+            File f_old = new File(fileName);
+            File f_new = new File(f_old.getParent() + "/" + partition + "-" + System.currentTimeMillis() + ".txt");
+            System.out.println(f_new.getAbsolutePath());
+            boolean renameStatus = f_old.renameTo(f_new);
+            if (!renameStatus) {
+                logger.error("{} failed to stage for upload due to renaming failure", f_old.getName());
+            }
             uploader.upload(f_new, key);
-            f_new.delete();
         }
 
         public long getCurrentOffset() {
@@ -181,6 +178,4 @@ public class WriterClient {
             return finished;
         }
     }
-
-
 }
