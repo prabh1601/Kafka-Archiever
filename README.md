@@ -27,8 +27,7 @@ The goals of this application are two fold
 * Complete Sink Connector (part 1 of project)
 
 ##### Future
-* Implement Fetching data between a given
-* fetching from S3
+* Implement Fetching data between a given time period from s3
 * Pushing to Another Kafka Cluster : Producer 
 * (week 7) Write Blog
 * (week 8) Presentation 
