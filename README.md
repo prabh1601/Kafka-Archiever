@@ -24,6 +24,7 @@ The goals of this application are two fold
 ##### Ongoing (Week 4)
 * Handle upload process better and put constraints to potential memory overflow
 * Incoporate various compression and upload options ?
+* Complete Sink Connector (part 1 of project)
 
 ##### Future
 * Implement Fetching data between a given
