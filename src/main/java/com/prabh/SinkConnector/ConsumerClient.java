@@ -86,7 +86,7 @@ public class ConsumerClient {
                 while (!stopped.get()) {
                     ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
                     if (!records.isEmpty()) {
-                        log(records);
+//                        log(records); makes logs too messy : rather get some better method
                         handleFetchedRecords(records);
                     }
                     checkActiveTasks();

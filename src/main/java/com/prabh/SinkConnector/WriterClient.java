@@ -23,6 +23,7 @@ public class WriterClient {
     private final Logger logger = LoggerFactory.getLogger(WriterClient.class);
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
+    private final ConcurrentHashMap<TopicPartition, File> writingFiles = new ConcurrentHashMap<>();
     private final UploaderClient uploader;
 
     WriterClient(int noOfConsumers, int taskPoolSize, UploaderClient _uploader) {
@@ -35,7 +36,7 @@ public class WriterClient {
     }
 
     public void submit(int consumer, TopicPartition partition, List<ConsumerRecord<String, String>> records) {
-        WritingTask t = new WritingTask(records);
+        WritingTask t = new WritingTask(records, partition);
         taskExecutor.submit(t);
         activeTasks.get(consumer).put(partition, t);
     }
@@ -92,6 +93,7 @@ public class WriterClient {
     private class WritingTask implements Runnable {
         private final Logger logger = LoggerFactory.getLogger(WritingTask.class.getName());
         private final List<ConsumerRecord<String, String>> records;
+        private final TopicPartition partition;
         private volatile boolean stopped = false;
         private volatile boolean started = false;
         private volatile boolean finished = false;
@@ -100,8 +102,16 @@ public class WriterClient {
         private final CompletableFuture<Long> completion = new CompletableFuture<>();
         private final int chunkSize = 10;
 
-        public WritingTask(List<ConsumerRecord<String, String>> _records) {
+        public WritingTask(List<ConsumerRecord<String, String>> _records, TopicPartition _partition) {
             this.records = _records;
+            this.partition = _partition;
+        }
+
+        boolean readyForUpload(String fileName) throws IOException {
+            long fileSizeInMB = Files.size(Paths.get(fileName)) / (1024 * 1024);
+            if(fileSizeInMB > chunkSize) return true;
+
+            return false;
         }
 
         @Override
@@ -112,11 +122,10 @@ public class WriterClient {
             startStopLock.unlock();
 
             try {
-                final int partition = records.get(0).partition();
-                final String topic = records.get(0).topic();
-                final String writeDir = "/mnt/Drive1/Kafka-Dump/" + topic;
+                final String writeDir = "/mnt/Drive1/Kafka-Dump/" + partition.topic();
                 new File(writeDir).mkdirs();
-                String fileName = writeDir + "/" + partition + ".txt";
+
+                String fileName = writeDir + "/" + partition.partition() + ".txt";
                 BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
                 for (ConsumerRecord<String, String> record : records) {
                     if (stopped) break;
@@ -125,9 +134,8 @@ public class WriterClient {
                 }
 
                 writer.close();
-                long fileSizeInMB = Files.size(Paths.get(fileName)) / (1024 * 1024);
-                if (fileSizeInMB > chunkSize) {
-                    UploadAndRotateShift(fileName, topic, partition);
+                if (readyForUpload(fileName)) {
+                    UploadAndRotateShift(fileName, partition);
                 }
             } catch (IOException e) {
                 logger.error("Writing files abrupted");
@@ -137,12 +145,12 @@ public class WriterClient {
             completion.complete(currentOffset.get());
         }
 
-        void UploadAndRotateShift(String fileName, String topic, int partition) {
+        void UploadAndRotateShift(String fileName, TopicPartition partition) {
             ZonedDateTime zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
-            String key = "topics/" + topic + "/year=" + zdt.getYear() + "/month=" + zdt.getMonth() + "/day="
-                    + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + System.currentTimeMillis() + "-" + partition;
+            String key = "topics/" + partition.topic() + "/year=" + zdt.getYear() + "/month=" + zdt.getMonth() + "/day="
+                    + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + System.currentTimeMillis() + "-" + partition.partition();
             File f_old = new File(fileName);
-            File f_new = new File(f_old.getParent() + "/" + partition + "-" + System.currentTimeMillis() + ".txt");
+            File f_new = new File(f_old.getParent() + "/" + partition.partition() + "-" + System.currentTimeMillis() + ".txt");
             boolean renameStatus = f_old.renameTo(f_new);
             if (!renameStatus) {
                 logger.error("{} failed to stage for upload due to renaming failure", f_old.getName());
