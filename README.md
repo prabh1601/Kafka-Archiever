@@ -23,11 +23,11 @@ The goals of this application are two fold
 
 ##### Ongoing (Week 4)
 * Handle upload process better and put constraints to potential memory overflow
-* Incoporate various compression and upload options ?
+* Incoporate various compression and upload options ? (pending on condition to agreement)
 * Complete Sink Connector (part 1 of project)
+* Fetching data between a given time period from s3
 
 ##### Future
-* Implement Fetching data between a given time period from s3
 * Pushing to Another Kafka Cluster : Producer 
 * (week 7) Write Blog
 * (week 8) Presentation 
