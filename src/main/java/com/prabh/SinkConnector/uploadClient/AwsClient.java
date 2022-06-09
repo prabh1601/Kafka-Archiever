@@ -1,9 +1,7 @@
-package com.prabh.Utils;
+package com.prabh.SinkConnector;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
@@ -19,8 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
-
-import static software.amazon.awssdk.transfer.s3.SizeConstant.MB;
 
 public class AwsClient {
     private final Logger logger = LoggerFactory.getLogger(AwsClient.class);
@@ -101,6 +97,7 @@ public class AwsClient {
         CompletableFuture<PutObjectResponse> future = client.putObject(objectRequest,
                 AsyncRequestBody.fromFile(Paths.get(file.getAbsolutePath()))
         );
+
         future.whenComplete((resp, err) -> {
             if (resp == null) {
                 err.printStackTrace();

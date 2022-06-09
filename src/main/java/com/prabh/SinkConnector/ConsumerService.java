@@ -1,4 +1,4 @@
-package com.prabh.SinkArchiever;
+package com.prabh.SinkConnector;
 
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
@@ -79,14 +79,15 @@ public class ConsumerClient {
 
         @Override
         public void run() {
+            Thread.currentThread().setName(this.consumerName);
             try {
-                logger.info("{} Started", consumerName);
+                logger.warn("{} Started", consumerName);
 
                 consumer.subscribe(List.of(subscribedTopic), this);
                 while (!stopped.get()) {
                     ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
                     if (!records.isEmpty()) {
-//                        log(records); makes logs too messy : rather get some better method
+                        log(records); // makes logs too messy : rather get some better method
                         handleFetchedRecords(records);
                     }
                     checkActiveTasks();
@@ -142,13 +143,12 @@ public class ConsumerClient {
         }
 
         public void log(ConsumerRecords<String, String> records) {
-            logger.info("{} Fetched {} records constituting of {}", consumerName, records.count(), records.partitions());
+            logger.info("Fetched {} records constituting of {}", records.count(), records.partitions());
         }
 
         private void setConsumerDetails(int consumerNumber) {
-            this.consumerName = "CONSUMER_THREAD-" + subscribedTopic + "-" + (consumerNumber + 1);
+            this.consumerName = "CONSUMER-THREAD-" + subscribedTopic + "-" + (consumerNumber + 1);
             this.consumerNo = consumerNumber;
-            Thread.currentThread().setName(this.consumerName);
         }
 
         public void stopConsumer() {

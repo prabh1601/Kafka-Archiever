@@ -1,5 +1,6 @@
-package com.prabh.SinkArchiever;
+package com.prabh.SinkConnector;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -23,12 +24,12 @@ public class WriterClient {
     private final Logger logger = LoggerFactory.getLogger(WriterClient.class);
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    private final ConcurrentHashMap<TopicPartition, File> writingFiles = new ConcurrentHashMap<>();
     private final UploaderClient uploader;
 
     WriterClient(int noOfConsumers, int taskPoolSize, UploaderClient _uploader) {
         this.uploader = _uploader;
-        this.taskExecutor = Executors.newFixedThreadPool(taskPoolSize);
+        ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("WRITER-THREAD-%d").build();
+        this.taskExecutor = Executors.newFixedThreadPool(taskPoolSize, namedThreadFactory);
         activeTasks = new ArrayList<>(noOfConsumers);
         for (int i = 0; i < noOfConsumers; i++) {
             activeTasks.add(new ConcurrentHashMap<>());
@@ -101,15 +102,19 @@ public class WriterClient {
         private final ReentrantLock startStopLock = new ReentrantLock();
         private final CompletableFuture<Long> completion = new CompletableFuture<>();
         private final int chunkSize = 10;
+        private final String fileName;
 
         public WritingTask(List<ConsumerRecord<String, String>> _records, TopicPartition _partition) {
             this.records = _records;
             this.partition = _partition;
+            String writeDir = "/mnt/Drive1/Kafka-Dump/" + partition.topic();
+            new File(writeDir).mkdirs();
+            this.fileName = writeDir + "/write-" + partition.partition() + ".txt";
         }
 
-        boolean readyForUpload(String fileName) throws IOException {
+        boolean readyForUpload() throws IOException {
             long fileSizeInMB = Files.size(Paths.get(fileName)) / (1024 * 1024);
-            if(fileSizeInMB > chunkSize) return true;
+            if (fileSizeInMB > chunkSize) return true;
 
             return false;
         }
@@ -122,40 +127,40 @@ public class WriterClient {
             startStopLock.unlock();
 
             try {
-                final String writeDir = "/mnt/Drive1/Kafka-Dump/" + partition.topic();
-                new File(writeDir).mkdirs();
-
-                String fileName = writeDir + "/" + partition.partition() + ".txt";
                 BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
                 for (ConsumerRecord<String, String> record : records) {
                     if (stopped) break;
-                    writer.write(record.timestamp() + " - " + record.value() + "\n");
+                    writer.write(record.value() + "\n");
                     currentOffset.set(record.offset() + 1);
                 }
 
                 writer.close();
-                if (readyForUpload(fileName)) {
-                    UploadAndRotateShift(fileName, partition);
+
+                if (readyForUpload()) {
+                    uploadAndRotateShift();
                 }
             } catch (IOException e) {
-                logger.error("Writing files abrupted");
+                logger.error("IOException while writing into local files");
             }
 
             finished = true;
             completion.complete(currentOffset.get());
         }
 
-        void UploadAndRotateShift(String fileName, TopicPartition partition) {
+        String getKey(TopicPartition partition) {
             ZonedDateTime zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
-            String key = "topics/" + partition.topic() + "/year=" + zdt.getYear() + "/month=" + zdt.getMonth() + "/day="
+            return "topics/" + partition.topic() + "/year=" + zdt.getYear() + "/month=" + zdt.getMonth() + "/day="
                     + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + System.currentTimeMillis() + "-" + partition.partition();
+        }
+
+        void uploadAndRotateShift() {
             File f_old = new File(fileName);
             File f_new = new File(f_old.getParent() + "/" + partition.partition() + "-" + System.currentTimeMillis() + ".txt");
             boolean renameStatus = f_old.renameTo(f_new);
             if (!renameStatus) {
                 logger.error("{} failed to stage for upload due to renaming failure", f_old.getName());
             }
-            uploader.upload(f_new, key);
+            uploader.upload(f_new, getKey(partition));
         }
 
         public long getCurrentOffset() {
