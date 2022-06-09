@@ -12,17 +12,17 @@ import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ConsumerClient {
-    private final Logger logger = LoggerFactory.getLogger(ConsumerClient.class);
+public class ConsumerService {
+    private final Logger logger = LoggerFactory.getLogger(ConsumerService.class);
     private final List<ConsumerThread> consumers;
-    private final WriterClient writer;
+    private final WriterService writer;
     private final CountDownLatch runningStatus;
     private final int noOfConsumers;
     private final String groupName;
     private final String serverId;
     private final String subscribedTopic;
 
-    ConsumerClient(WriterClient _writer, int _noOfConsumers, String _groupName, String _serverId, String _topic) {
+    ConsumerService(WriterService _writer, int _noOfConsumers, String _groupName, String _serverId, String _topic) {
         this.writer = _writer;
         this.groupName = _groupName;
         this.serverId = _serverId;

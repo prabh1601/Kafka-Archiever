@@ -20,13 +20,13 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class WriterClient {
-    private final Logger logger = LoggerFactory.getLogger(WriterClient.class);
+public class WriterService {
+    private final Logger logger = LoggerFactory.getLogger(WriterService.class);
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    private final UploaderClient uploader;
+    private final UploaderService uploader;
 
-    WriterClient(int noOfConsumers, int taskPoolSize, UploaderClient _uploader) {
+    WriterService(int noOfConsumers, int taskPoolSize, UploaderService _uploader) {
         this.uploader = _uploader;
         ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("WRITER-THREAD-%d").build();
         this.taskExecutor = Executors.newFixedThreadPool(taskPoolSize, namedThreadFactory);
@@ -154,6 +154,11 @@ public class WriterClient {
         }
 
         void uploadAndRotateShift() {
+            try {
+                uploader.semaphore.acquire();
+            } catch (Exception e) {
+                logger.error("{} failed to acquire semaphore", fileName);
+            }
             File f_old = new File(fileName);
             File f_new = new File(f_old.getParent() + "/" + partition.partition() + "-" + System.currentTimeMillis() + ".txt");
             boolean renameStatus = f_old.renameTo(f_new);

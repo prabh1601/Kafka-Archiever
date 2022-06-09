@@ -1,4 +1,4 @@
-package com.prabh.SinkArchiever;
+package com.prabh.SinkConnector;
 
 import com.prabh.Utils.AdminController;
 import org.slf4j.Logger;
@@ -6,9 +6,9 @@ import org.slf4j.LoggerFactory;
 
 public class SinkApplication {
     private final Logger logger = LoggerFactory.getLogger(SinkApplication.class);
-    private final ConsumerClient consumerClient;
-    private final WriterClient writerClient;
-    private final UploaderClient uploaderClient;
+    private final ConsumerService consumerClient;
+    private final WriterService writerClient;
+    private final UploaderService uploaderClient;
     private final AdminController adminController;
 
     private SinkApplication(Builder builder) {
@@ -20,11 +20,11 @@ public class SinkApplication {
             throw new RuntimeException();
         }
         // Creating Uploader Client
-        this.uploaderClient = new UploaderClient();
+        this.uploaderClient = new UploaderService();
         // Creating Writer Client
-        this.writerClient = new WriterClient(builder.noOfConsumers, builder.noOfSimultaneousTask, uploaderClient);
+        this.writerClient = new WriterService(builder.noOfConsumers, builder.noOfSimultaneousTask, uploaderClient);
         // Creating Consumer Client
-        this.consumerClient = new ConsumerClient(writerClient, builder.noOfConsumers, builder.groupName,
+        this.consumerClient = new ConsumerService(writerClient, builder.noOfConsumers, builder.groupName,
                 builder.serverId, builder.topic);
     }
 

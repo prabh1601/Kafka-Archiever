@@ -1,4 +1,4 @@
-package com.prabh.SinkConnector;
+package com.prabh.SinkConnector.uploadClient;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,8 +21,8 @@ import java.util.concurrent.CompletableFuture;
 public class AwsClient {
     private final Logger logger = LoggerFactory.getLogger(AwsClient.class);
     Properties values = new Properties();
-    private S3TransferManager s3tm;
-    private List<S3AsyncClient> clients;
+    private List<S3TransferManager>tmClients;
+    private List<S3AsyncClient> asyncClients;
 
     public AwsClient() {
         try {
@@ -31,8 +31,6 @@ public class AwsClient {
             logger.error(e.getMessage(), e);
             throw new RuntimeException();
         }
-
-//        initConnection();
     }
 
 //    public void initConnection() { Region region = Region.AP_SOUTH_1;
@@ -64,7 +62,7 @@ public class AwsClient {
         logger.info("Successfully uploaded file : {}", file.getName());
     }
 
-    public void upload(File file, String key) {
+    public void uploadUsingtm(File file, String key) {
         Upload upload = s3tm.upload(b -> b.source(Paths.get(file.getAbsolutePath()))
                 .putObjectRequest(req -> req.bucket(values.getProperty("bucketName"))
                         .key(key)));
@@ -74,9 +72,9 @@ public class AwsClient {
     }
 
     public void initConnection(int noOfClients) {
-        clients = new ArrayList<>(noOfClients);
+        asyncClients = new ArrayList<>(noOfClients);
         for (int i = 0; i < noOfClients; i++) {
-            clients.add(getAsyncClient());
+            asyncClients.add(getAsyncClient());
         }
     }
 
@@ -87,7 +85,7 @@ public class AwsClient {
     }
 
     public void uploadAsync(int clientNo, File file, String key) {
-        S3AsyncClient client = clients.get(clientNo);
+        S3AsyncClient client = asyncClients.get(clientNo);
         PutObjectRequest objectRequest = PutObjectRequest.builder()
                 .bucket(values.getProperty("bucket"))
                 .key(key)
