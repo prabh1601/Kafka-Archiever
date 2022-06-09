@@ -14,46 +14,24 @@ import java.util.concurrent.*;
  */
 public class UploaderService {
     private final Logger logger = LoggerFactory.getLogger(UploaderService.class);
-    private ExecutorService uploadExecutor;
+    private final ExecutorService uploadExecutor;
     private final int noOfSimultaneousUploads;
-    private final int maxConcurrentHoldings;
-    final Semaphore semaphore;
-    private final AwsClient s3Client = new AwsClient();
+    protected final Semaphore semaphore;
+    private final AwsClient s3Client;
 
-    public UploaderService(int _noOfSimultaneousUploads, int _maxConcurrentHoldings) {
-        this.noOfSimultaneousUploads = _noOfSimultaneousUploads;
-        this.maxConcurrentHoldings = _maxConcurrentHoldings;
-        this.semaphore = new Semaphore(this.maxConcurrentHoldings);
-        init();
-    }
-
-    public UploaderService(int _noOfSimultaneousUploads) {
-        this(_noOfSimultaneousUploads, 3);
-    }
-
-    UploaderService() {
-        this(2);
-    }
-
-    void init() {
-        s3Client.initConnection(noOfSimultaneousUploads);
+    public UploaderService() {
+        this.noOfSimultaneousUploads = Config.noOfSimultaneousUploads;
+        int maxConcurrentHoldings = Config.maxConcurrentHoldings;
+        this.s3Client = new AwsClient(noOfSimultaneousUploads);
+        this.semaphore = new Semaphore(maxConcurrentHoldings);
         // (corePoolSize, maxPoolSize, keepAliveTime, timeUnit, queueType, threadFactory, RejectedExecutionHandler)
-        uploadExecutor = new ThreadPoolExecutor(this.noOfSimultaneousUploads,
+        this.uploadExecutor = new ThreadPoolExecutor(this.noOfSimultaneousUploads,
                 this.noOfSimultaneousUploads,
                 0L,
                 TimeUnit.MILLISECONDS,
-                new ArrayBlockingQueue<>(this.maxConcurrentHoldings),
+                new ArrayBlockingQueue<>(maxConcurrentHoldings),
                 new ThreadFactoryBuilder().setNameFormat("UPLOADER-THREAD-%d").build(),
                 new ThreadPoolExecutor.AbortPolicy());
-    }
-
-    public void upload(File file, String key) {
-        try {
-            uploadExecutor.submit(new UploadingTask(file, key));
-        } catch (RejectedExecutionException e) {
-            logger.error("{} Writing Task failed to stage for upload due to failure in scheduling for execution", file.getName());
-            // Do something for this file here ?
-        }
     }
 
     public void shutdown() {
@@ -64,6 +42,15 @@ public class UploaderService {
             logger.error(e.getMessage(), e);
         }
         logger.warn("Uploader Client Shutdown complete");
+    }
+
+    public void upload(File file, String key) {
+        try {
+            uploadExecutor.submit(new UploadingTask(file, key));
+        } catch (RejectedExecutionException e) {
+            logger.error("{} Writing Task failed to stage for upload due to failure in scheduling for execution", file.getName());
+            // Do something for this file here ?
+        }
     }
 
     private class UploadingTask implements Runnable {
@@ -79,7 +66,7 @@ public class UploaderService {
             semaphore.release();
             logger.info("{} Started uploading with key {}", file.getName(), key);
             long threadId = Thread.currentThread().getId() % noOfSimultaneousUploads;
-            s3Client.uploadAsync((int) threadId, file, key);
+            s3Client.uploadSync((int) threadId, file, key);
             if (!file.delete()) {
                 logger.error("{} Deletion failed", file.getName());
             }
