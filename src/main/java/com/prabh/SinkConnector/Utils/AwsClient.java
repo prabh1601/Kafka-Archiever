@@ -15,6 +15,8 @@ import software.amazon.awssdk.transfer.s3.*;
 
 import java.io.*;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
@@ -24,6 +26,7 @@ public class AwsClient {
     private final Logger logger = LoggerFactory.getLogger(AwsClient.class);
     Properties values = new Properties();
     private S3TransferManager s3tm;
+    private List<S3AsyncClient> clients;
 
     public AwsClient() {
         try {
@@ -32,23 +35,23 @@ public class AwsClient {
             logger.error(e.getMessage(), e);
             throw new RuntimeException();
         }
+
 //        initConnection();
     }
 
-    public void initConnection() {
-        Region region = Region.AP_SOUTH_1;
-        AwsBasicCredentials awsCreds = AwsBasicCredentials.create(values.getProperty("awsKeyId"), values.getProperty("awsSecretKey"));
-        S3ClientConfiguration s3ClientConfiguration = S3ClientConfiguration.builder()
-                .region(region)
-                .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
-                .minimumPartSizeInBytes((long) (9 * MB))
-                .targetThroughputInGbps(20.0)
-                .build();
-
-        s3tm = S3TransferManager.builder()
-                .s3ClientConfiguration(s3ClientConfiguration)
-                .build();
-    }
+//    public void initConnection() { Region region = Region.AP_SOUTH_1;
+//        AwsBasicCredentials awsCreds = AwsBasicCredentials.create(values.getProperty("awsKeyId"), values.getProperty("awsSecretKey"));
+//        S3ClientConfiguration s3ClientConfiguration = S3ClientConfiguration.builder()
+//                .region(region)
+//                .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
+//                .minimumPartSizeInBytes((long) (9 * MB))
+//                .targetThroughputInGbps(20.0)
+//                .build();
+//
+//        s3tm = S3TransferManager.builder()
+//                .s3ClientConfiguration(s3ClientConfiguration)
+//                .build();
+//    }
 
     public void uploadObject(File file, String key) {
         Region region = Region.AP_SOUTH_1;
@@ -74,13 +77,21 @@ public class AwsClient {
         logger.info("Successfully uploaded file : {}", file.getName());
     }
 
-    public void uploadAsync(File file, String key) {
+    public void initConnection(int noOfClients) {
+        clients = new ArrayList<>(noOfClients);
+        for (int i = 0; i < noOfClients; i++) {
+            clients.add(getAsyncClient());
+        }
+    }
 
-        Region region = Region.AP_SOUTH_1;
-        S3AsyncClient client = S3AsyncClient.builder()
-                .region(region)
+    private S3AsyncClient getAsyncClient() {
+        return S3AsyncClient.builder()
+                .region(Region.AP_SOUTH_1)
                 .build();
+    }
 
+    public void uploadAsync(int clientNo, File file, String key) {
+        S3AsyncClient client = clients.get(clientNo);
         PutObjectRequest objectRequest = PutObjectRequest.builder()
                 .bucket(values.getProperty("bucket"))
                 .key(key)
@@ -91,13 +102,8 @@ public class AwsClient {
                 AsyncRequestBody.fromFile(Paths.get(file.getAbsolutePath()))
         );
         future.whenComplete((resp, err) -> {
-            try {
-                if (resp == null) {
-                    err.printStackTrace();
-                }
-            } finally {
-                // Only close the client when you are completely done with it
-                client.close();
+            if (resp == null) {
+                err.printStackTrace();
             }
         });
 
