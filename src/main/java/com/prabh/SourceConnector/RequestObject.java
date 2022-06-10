@@ -1,9 +1,6 @@
 package com.prabh.SourceConnector;
 
-import com.amazonaws.Request;
-
 import java.util.List;
-import java.util.stream.IntStream;
 
 public class RequestObject {
     private static int depth = 5;
@@ -53,19 +50,19 @@ public class RequestObject {
         }
 
         public EndTimestampBuilder(int year, int month, int date, int hour) {
-            this(year, month, date, hour, 0);
+            this(year, month, date, hour, 59);
         }
 
         public EndTimestampBuilder(int year, int month, int date) {
-            this(year, month, date, 0);
+            this(year, month, date, 23);
         }
 
         public EndTimestampBuilder(int year, int month) {
-            this(year, month, 0);
+            this(year, month, 31);
         }
 
         public EndTimestampBuilder(int year) {
-            this(year, 0);
+            this(year, 12);
         }
 
         public RequestObject build() {
