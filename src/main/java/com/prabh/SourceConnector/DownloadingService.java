@@ -60,7 +60,7 @@ public class DownloadingService {
             boolean nRightBorder = rightBorder && (i == rightEndpoint);
             query(currentDepth + 1, currentState, nLeftBorder, nRightBorder);
             currentState.remove(currentState.size() - 1);
-            // Holy god you kidding me ? why is there no c++ like pop_back() ??????? :/
+            // Why is there no c++ like pop_back() :/
         }
     }
 

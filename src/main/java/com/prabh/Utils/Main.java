@@ -6,7 +6,7 @@ import com.prabh.SourceConnector.RequestObject;
 
 // Template UseCases
 public class Main {
-    public void SinkConnectorTemplate(){
+    public void SinkConnectorTemplate() {
         // SinkConnector
         SinkApplication app = new SinkApplication.Builder()
                 .bootstrapServer(Config.bootstrapServer)
@@ -25,10 +25,11 @@ public class Main {
         }));
     }
 
-    public void SourceConnectorTemplate(){
+    public void SourceConnectorTemplate() {
         // Source Connector
+        // Constructor : (year, month, date, hour, min) -> Not required to put all 5, any prefix of this values work
         RequestObject start = new RequestObject
-                .StartTimestampBuilder(2022, 6, 10,12)
+                .StartTimestampBuilder(2022, 6, 10, 12, 5)
                 .build();
 
         RequestObject end = new RequestObject
