@@ -7,6 +7,7 @@ The goals of this application are two fold
 
 
 ## Timeline
+
 ##### Week 1
 * Induction 
 * Learning Java (Basics)
