@@ -1,19 +1,46 @@
 package com.prabh.Utils;
 
-import com.prabh.SinkArchiever.SinkApplication;
+import com.prabh.SinkConnector.SinkApplication;
+import com.prabh.SourceConnector.DownloadingService;
+import com.prabh.SourceConnector.RequestObject;
 
-// Template UseCase of SinkApplication
+// Template UseCases
 public class Main {
-    public static void main(String[] args) throws InterruptedException {
+    public void SinkConnectorTemplate(){
+        // SinkConnector
         SinkApplication app = new SinkApplication.Builder()
-                .bootstrapServer("localhost:9092")
-                .consumerGroup("cg")
-                .consumerCount(3)
-                .subscribedTopic("test")
-                .writeTaskCount(10)
+                .bootstrapServer(Config.bootstrapServer)
+                .consumerGroup(Config.consumerGroup)
+                .consumerCount(Config.consumerCount)
+                .subscribedTopic(Config.subscribedTopic)
+                .writeTaskCount(Config.writeTaskCount)
                 .build();
 
         app.start();
 
+        // shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            Thread.currentThread().setName("Shutdown Hook");
+            app.shutdown();
+        }));
+    }
+
+    public void SourceConnectorTemplate(){
+        // Source Connector
+        RequestObject start = new RequestObject
+                .StartTimestampBuilder(2022, 6, 10,12)
+                .build();
+
+        RequestObject end = new RequestObject
+                .EndTimestampBuilder(2022, 6, 10)
+                .build();
+
+        DownloadingService d = new DownloadingService("test", start, end);
+        d.run();
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+//        new Main().SinkConnectorTemplate();
+//        new Main().SourceConnectorTemplate();
     }
 }
