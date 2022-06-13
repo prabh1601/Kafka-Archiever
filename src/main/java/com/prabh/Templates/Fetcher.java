@@ -9,11 +9,11 @@ public class Fetcher {
         // Source Connector
         // Constructor : (year, month, date, hour, min) -> Not required to put all 5, any prefix of this values work
         RequestObject start = new RequestObject
-                .StartTimestampBuilder(2022, 6, 10, 9, 5)
+                .StartTimestampBuilder(2022, 6, 10, 10, 50)
                 .build();
 
         RequestObject end = new RequestObject
-                .EndTimestampBuilder(2022, 6, 10, 11)
+                .EndTimestampBuilder(2022, 6, 10, 10, 55)
                 .build();
 
         SourceApplication app = new SourceApplication.Builder()

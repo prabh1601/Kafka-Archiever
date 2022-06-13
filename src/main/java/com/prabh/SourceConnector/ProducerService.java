@@ -11,6 +11,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,6 +23,7 @@ public class ProducerService {
     private final KafkaProducer<String, String> producer;
     private final String bootstrapId;
     private final ExecutorService executor;
+    private final HashSet<File> garbageFolders = new HashSet<>();
     // ^ This is not final. Still pending benchmarks
 
     public ProducerService(String topic, String _bootstrapId) {
@@ -49,7 +51,20 @@ public class ProducerService {
         executor.shutdown();
         executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         producer.close();
+        deleteRedundantFolders();
         logger.info("Producer Service Shutdown successful");
+    }
+
+    public void deleteRedundantFolders() {
+        for (File file : garbageFolders) {
+            while (file != null && !file.getAbsolutePath().equals(Config.DownloaderServiceDir)) {
+                File parentFile = file.getParentFile();
+                logger.info(file.getAbsolutePath());
+                file.delete();
+                file = parentFile;
+            }
+        }
+        System.out.println(garbageFolders);
     }
 
     private class ProducerTask implements Runnable {
@@ -70,8 +85,10 @@ public class ProducerService {
             File file = new File(filePath);
             if (!file.exists()) {
                 logger.error("{} Downloaded file missing in local cache", filePath);
+                return;
             }
 
+            garbageFolders.add(file.getParentFile());
             try {
                 FileReader frd = new FileReader(filePath);
                 BufferedReader brd = new BufferedReader(frd);
@@ -81,7 +98,7 @@ public class ProducerService {
                 }
                 brd.close();
                 frd.close();
-//                file.delete();
+                file.delete();
             } catch (IOException e) {
                 logger.error(e.getMessage(), e);
             }

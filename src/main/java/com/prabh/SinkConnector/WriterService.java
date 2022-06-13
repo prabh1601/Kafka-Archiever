@@ -1,6 +1,7 @@
 package com.prabh.SinkConnector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.prabh.Utils.Config;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -107,7 +108,7 @@ public class WriterService {
         public WritingTask(List<ConsumerRecord<String, String>> _records, TopicPartition _partition) {
             this.records = _records;
             this.partition = _partition;
-            String writeDir = "/mnt/Drive1/Kafka-Dump/" + partition.topic();
+            String writeDir = Config.WriterServiceDir + partition.topic();
             new File(writeDir).mkdirs();
             this.fileName = writeDir + "/write-" + partition.partition() + ".txt";
         }

@@ -110,7 +110,7 @@ public class DownloadingService implements Runnable {
     }
 
     public void createKafkaTask(String keyPrefix) {
-        String completePrefix = Config.writeDir + keyPrefix;
+        String completePrefix = Config.DownloaderServiceDir + "/" + keyPrefix;
         StringBuilder pathName = new StringBuilder(completePrefix);
         while (pathName.charAt(pathName.length() - 1) != '/') {
             pathName.setLength(pathName.length() - 1);
@@ -125,11 +125,6 @@ public class DownloadingService implements Runnable {
         }
     }
 
-    /*
-    Pending :
-    Check if delete is thread safe
-    It might happen that transfer manager is writing into the same directory and the same time delete is triggered
-     */
     public int fetchLocalFiles(File dir, String prefix) {
         File[] files = dir.listFiles();
         if (files == null) {
@@ -144,7 +139,8 @@ public class DownloadingService implements Runnable {
         for (File file : files) {
             fetched += fetchLocalFiles(file, prefix);
         }
-        dir.delete();
+
+        dir.deleteOnExit();
         return fetched;
     }
 }

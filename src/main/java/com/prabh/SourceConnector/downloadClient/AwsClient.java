@@ -36,7 +36,7 @@ public class AwsClient {
 
     public void download(String key_prefix) {
         try {
-            MultipleFileDownload xfer = xfer_mgr.downloadDirectory(Config.bucket, key_prefix, new File(Config.writeDir));
+            MultipleFileDownload xfer = xfer_mgr.downloadDirectory(Config.bucket, key_prefix, new File(Config.DownloaderServiceDir));
             downloads.add(xfer);
         } catch (AmazonServiceException e) {
             System.err.println(e.getErrorMessage());
