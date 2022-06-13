@@ -32,6 +32,15 @@ public class DownloadingService implements Runnable {
         this.producerService = _producerService;
     }
 
+    public void shutdown() {
+        awsClient.shutdown();
+        try {
+            producerService.shutdown();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public String getValidPrefix(int depth, List<Integer> state) {
 
         StringBuilder keyPrefixBuilder = new StringBuilder("topics/" + downloadTopic + "/");
@@ -73,11 +82,11 @@ public class DownloadingService implements Runnable {
     public void run() {
         Thread.currentThread().setName("DOWNLOADER-THREAD");
         logger.info("""
-                Data Fetching Started
-                Query Range :
-                      Start prefix : {}
-                      End prefix   : {}
-                """,
+                        Data Fetching Started
+                        Query Range :
+                              Start prefix : {}
+                              End prefix   : {}
+                        """,
                 getValidPrefix(5, start.currentValue),
                 getValidPrefix(5, end.currentValue));
         List<Integer> currentState = new ArrayList<>(maxDepth + 1);
@@ -87,6 +96,7 @@ public class DownloadingService implements Runnable {
         logger.info("All valid prefixes queried");
         waitForCompletion();
         logger.info("Data Fetching Complete");
+        shutdown();
     }
 
     public void waitForCompletion() {
@@ -97,19 +107,21 @@ public class DownloadingService implements Runnable {
             XferMgrProgress.waitForCompletion(xfer);
             createKafkaTask(keyPrefix);
         }
-        awsClient.shutdown();
     }
 
     public void createKafkaTask(String keyPrefix) {
-        StringBuilder pathName = new StringBuilder(Config.writeDir + keyPrefix);
+        String completePrefix = Config.writeDir + keyPrefix;
+        StringBuilder pathName = new StringBuilder(completePrefix);
         while (pathName.charAt(pathName.length() - 1) != '/') {
             pathName.setLength(pathName.length() - 1);
         }
         String filePath = pathName.toString();
         File dir = new File(filePath);
         if (dir.exists()) {
-            int fetched = fetchLocalFiles(dir);
-            logger.info("{} files downloaded matching prefix {}", fetched, keyPrefix);
+            int fetched = fetchLocalFiles(dir, completePrefix);
+            if (fetched != 0) {
+                logger.info("{} files downloaded matching prefix {}", fetched, keyPrefix);
+            }
         }
     }
 
@@ -118,16 +130,19 @@ public class DownloadingService implements Runnable {
     Check if delete is thread safe
     It might happen that transfer manager is writing into the same directory and the same time delete is triggered
      */
-    public int fetchLocalFiles(File dir) {
+    public int fetchLocalFiles(File dir, String prefix) {
         File[] files = dir.listFiles();
         if (files == null) {
-            // This is buggy on the prefix where it goes till min, still needs fixing
-            producerService.submit(dir.getAbsolutePath());
-            return 1;
+            String filePath = dir.getAbsolutePath();
+            if (filePath.startsWith(prefix)) {
+                producerService.submit(dir.getAbsolutePath());
+                return 1;
+            }
+            return 0;
         }
         int fetched = 0;
         for (File file : files) {
-            fetched += fetchLocalFiles(file);
+            fetched += fetchLocalFiles(file, prefix);
         }
         dir.delete();
         return fetched;
