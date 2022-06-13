@@ -18,7 +18,7 @@ public class RequestObject {
         List<Integer> timestampParameters;
 
         public StartTimestampBuilder(int year, int month, int date, int hour, int min) {
-            timestampParameters = List.of(year, month, date, hour, min);
+            timestampParameters = List.of(-1, year, month, date, hour, min);
         }
 
         public StartTimestampBuilder(int year, int month, int date, int hour) {
@@ -46,7 +46,7 @@ public class RequestObject {
         List<Integer> timestampParameters;
 
         public EndTimestampBuilder(int year, int month, int date, int hour, int min) {
-            timestampParameters = List.of(year, month, date, hour, min);
+            timestampParameters = List.of(-1,year, month, date, hour, min);
         }
 
         public EndTimestampBuilder(int year, int month, int date, int hour) {
