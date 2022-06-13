@@ -140,7 +140,6 @@ public class DownloadingService implements Runnable {
             fetched += fetchLocalFiles(file, prefix);
         }
 
-        dir.deleteOnExit();
         return fetched;
     }
 }

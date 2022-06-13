@@ -23,13 +23,17 @@ The goals of this application are two fold
 * Try different models to push data to s3
 * Implement individual services/client structures for more streamline workflow of the application
 
-##### Ongoing (Week 4)
+##### Week 4
 * Handle upload process better and put constraints to potential memory overflow
-* Incoporate various compression and upload options ? (pending on condition to agreement)
-* Complete Sink Connector (part 1 of project)
 * Fetching data between a given time period from s3
+* Pushing to Another Kafka Cluster : Producer
+
 
 ##### Future
-* Pushing to Another Kafka Cluster : Producer 
+* Incoporate various compression and upload options ? (pending on condition to agreement)
+* Incorporate additional missing stuff
+* Discuss Initial Iteration of the project
+* Try on a cloudhost (maybe run in a Docker ?)
+* Improve the project status
 * (week 7) Write Blog
 * (week 8) Presentation 
