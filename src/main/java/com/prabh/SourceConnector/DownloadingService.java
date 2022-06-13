@@ -11,7 +11,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DownloadingService {
+public class DownloadingService implements Runnable {
     private final Logger logger = LoggerFactory.getLogger(DownloadingService.class);
     private final RequestObject start;
     private final RequestObject end;
@@ -20,16 +20,19 @@ public class DownloadingService {
     private final List<String> levelPrefix;
     private final String downloadTopic;
     private final AwsClient awsClient = new AwsClient();
+    private final ProducerService producerService;
+    // Intended : Use Blocking Queue for Fetched files
 
-    public DownloadingService(String _topic, RequestObject _start, RequestObject _end) {
+    public DownloadingService(String _topic, RequestObject _start, RequestObject _end, ProducerService _producerService) {
         this.start = _start;
         this.end = _end;
         this.maxPossible = List.of(-1, Integer.MAX_VALUE, 12, 31, 23, 59);
         this.levelPrefix = List.of("topic", "year=", "month=", "day=", "hour=", "");
         this.downloadTopic = _topic;
+        this.producerService = _producerService;
     }
 
-    public void stageForDownload(int depth, List<Integer> state) {
+    public String getValidPrefix(int depth, List<Integer> state) {
 
         StringBuilder keyPrefixBuilder = new StringBuilder("topics/" + downloadTopic + "/");
         for (int i = 1; i <= depth; i++) {
@@ -37,9 +40,12 @@ public class DownloadingService {
             if (i != maxDepth) keyPrefixBuilder.append("/");
         }
 
-        String keyPrefix = keyPrefixBuilder.toString();
+        return keyPrefixBuilder.toString();
+    }
 
-        logger.info("Fetching files with prefix {}", keyPrefix);
+    public void stageForDownload(int depth, List<Integer> state) {
+        String keyPrefix = getValidPrefix(depth, state);
+//        logger.info("Valid Prefix hit : {}", keyPrefix);
         awsClient.download(keyPrefix);
     }
 
@@ -50,8 +56,8 @@ public class DownloadingService {
             return;
         }
 
-        int leftEndpoint = start.currentValue.get(currentDepth);
-        int rightEndpoint = end.currentValue.get(currentDepth);
+        int leftEndpoint = start.currentValue.get(currentDepth + 1);
+        int rightEndpoint = end.currentValue.get(currentDepth + 1);
         int startingValue = leftBorder ? leftEndpoint : 0;
         int endingValue = rightBorder ? rightEndpoint : maxPossible.get(currentDepth + 1);
         for (int i = startingValue; i <= endingValue; i++) {
@@ -65,21 +71,32 @@ public class DownloadingService {
     }
 
     public void run() {
+        Thread.currentThread().setName("DOWNLOADER-THREAD");
+        logger.info("""
+                Data Fetching Started
+                Query Range :
+                      Start prefix : {}
+                      End prefix   : {}
+                """,
+                getValidPrefix(5, start.currentValue),
+                getValidPrefix(5, end.currentValue));
         List<Integer> currentState = new ArrayList<>(maxDepth + 1);
         currentState.add(-1);
+        logger.info("Generating Valid prefixes");
         query(0, currentState, true, true);
+        logger.info("All valid prefixes queried");
         waitForCompletion();
+        logger.info("Data Fetching Complete");
     }
 
     public void waitForCompletion() {
         List<MultipleFileDownload> downloads = awsClient.getOngoingDownloads();
         for (MultipleFileDownload xfer : downloads) {
+            String keyPrefix = xfer.getKeyPrefix();
 //            XferMgrProgress.showTransferProgress(xfer);
             XferMgrProgress.waitForCompletion(xfer);
-            String keyPrefix = xfer.getKeyPrefix();
             createKafkaTask(keyPrefix);
         }
-
         awsClient.shutdown();
     }
 
@@ -91,7 +108,8 @@ public class DownloadingService {
         String filePath = pathName.toString();
         File dir = new File(filePath);
         if (dir.exists()) {
-            fetchLocalFiles(dir);
+            int fetched = fetchLocalFiles(dir);
+            logger.info("{} files downloaded matching prefix {}", fetched, keyPrefix);
         }
     }
 
@@ -100,16 +118,18 @@ public class DownloadingService {
     Check if delete is thread safe
     It might happen that transfer manager is writing into the same directory and the same time delete is triggered
      */
-    public void fetchLocalFiles(File dir) {
+    public int fetchLocalFiles(File dir) {
         File[] files = dir.listFiles();
         if (files == null) {
-            System.out.println(dir.getAbsolutePath());
-            dir.delete();
-            return;
+            // This is buggy on the prefix where it goes till min, still needs fixing
+            producerService.submit(dir.getAbsolutePath());
+            return 1;
         }
+        int fetched = 0;
         for (File file : files) {
-            fetchLocalFiles(file);
+            fetched += fetchLocalFiles(file);
         }
         dir.delete();
+        return fetched;
     }
 }
