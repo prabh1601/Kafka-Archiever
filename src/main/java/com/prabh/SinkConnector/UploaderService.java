@@ -2,6 +2,7 @@ package com.prabh.SinkConnector;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.prabh.SinkConnector.uploadClient.AwsClient;
+import com.prabh.Utils.Config;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

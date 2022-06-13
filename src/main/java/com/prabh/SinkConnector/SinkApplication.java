@@ -36,7 +36,6 @@ public class SinkApplication {
         }
 
         // Put Other Validation Checks
-
         return true;
     }
 
@@ -48,6 +47,7 @@ public class SinkApplication {
         consumerClient.shutdown();
         writerClient.shutdown();
         uploaderClient.shutdown();
+        adminController.shutdown();
     }
 
     public static class Builder {

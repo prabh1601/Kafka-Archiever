@@ -149,8 +149,8 @@ public class WriterService {
 
         String getKey(TopicPartition partition) {
             ZonedDateTime zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
-            return "topics/" + partition.topic() + "/year=" + zdt.getYear() + "/month=" + zdt.getMonth() + "/day="
-                    + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + System.currentTimeMillis() + "-" + partition.partition();
+            return "topics/" + partition.topic() + "/year=" + zdt.getYear() + "/month=" + zdt.getMonthValue() + "/date="
+                    + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + zdt.getMinute() + "-" + partition.partition();
         }
 
         void uploadAndRotateShift() {

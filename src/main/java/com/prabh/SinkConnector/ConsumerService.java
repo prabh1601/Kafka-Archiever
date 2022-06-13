@@ -1,5 +1,6 @@
 package com.prabh.SinkConnector;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
@@ -10,11 +11,15 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConsumerService {
     private final Logger logger = LoggerFactory.getLogger(ConsumerService.class);
     private final List<ConsumerThread> consumers;
+    private final Executor workers;
     private final WriterService writer;
     private final CountDownLatch runningStatus;
     private final int noOfConsumers;
@@ -27,16 +32,19 @@ public class ConsumerService {
         this.groupName = _groupName;
         this.serverId = _serverId;
         this.noOfConsumers = _noOfConsumers;
+
+        ThreadFactory tf = new ThreadFactoryBuilder().setNameFormat("CONSUMER-THREAD-%d").build();
+        this.workers = Executors.newFixedThreadPool(noOfConsumers, tf);
         this.runningStatus = new CountDownLatch(this.noOfConsumers);
         this.consumers = new ArrayList<>(_noOfConsumers);
         this.subscribedTopic = _topic;
     }
 
     public void start() {
+
         for (int i = 0; i < noOfConsumers; i++) {
-            ConsumerThread c = new ConsumerThread();
-            c.setConsumerDetails(i);
-            c.start();
+            ConsumerThread c = new ConsumerThread(i);
+            workers.execute(c);
             synchronized (consumers) {
                 consumers.add(c);
             }
@@ -61,11 +69,11 @@ public class ConsumerService {
         private final KafkaConsumer<String, String> consumer;
         private final AtomicBoolean stopped = new AtomicBoolean(false);
         private final Map<TopicPartition, OffsetAndMetadata> pendingOffsets = new HashMap<>();
-        private String consumerName;
-        private int consumerNo;
+        private final int consumerNo;
         private long lastCommitTime = System.currentTimeMillis();
 
-        public ConsumerThread() {
+        public ConsumerThread(int consumerNumber) {
+            this.consumerNo = consumerNumber;
             Properties consumerProperties = new Properties();
             consumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, serverId);
             consumerProperties.put(ConsumerConfig.GROUP_ID_CONFIG, groupName);
@@ -79,9 +87,8 @@ public class ConsumerService {
 
         @Override
         public void run() {
-            Thread.currentThread().setName(this.consumerName);
             try {
-                logger.warn("{} Started", consumerName);
+                logger.warn("{} Started",Thread.currentThread().getName());
 
                 consumer.subscribe(List.of(subscribedTopic), this);
                 while (!stopped.get()) {
@@ -100,7 +107,7 @@ public class ConsumerService {
             } finally {
                 consumer.close();
                 runningStatus.countDown();
-                logger.warn("{} Shutdown Successfully", consumerName);
+                logger.warn("{} Shutdown Successfully",Thread.currentThread().getName());
             }
         }
 
@@ -138,7 +145,7 @@ public class ConsumerService {
                     lastCommitTime = currentTimeInMillis;
                 }
             } catch (Exception e) {
-                logger.error("{} failed to commit offsets during routine offset commit", consumerName);
+                logger.error("Failed to commit offsets during routine offset commit");
             }
         }
 
@@ -146,13 +153,8 @@ public class ConsumerService {
             logger.info("Fetched {} records constituting of {}", records.count(), records.partitions());
         }
 
-        private void setConsumerDetails(int consumerNumber) {
-            this.consumerName = "CONSUMER-THREAD-" + subscribedTopic + "-" + (consumerNumber + 1);
-            this.consumerNo = consumerNumber;
-        }
-
         public void stopConsumer() {
-            logger.warn("Stopping {}", consumerName);
+            logger.warn("Stopping");
             stopped.set(true);
             consumer.wakeup();
         }
@@ -176,7 +178,7 @@ public class ConsumerService {
             try {
                 consumer.commitSync(offsetsToCommit);
             } catch (Exception e) {
-                logger.error("{} Failed to commit offset during re-balance", consumerName);
+                logger.error("Failed to commit offset during re-balance");
             }
         }
 
