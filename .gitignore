@@ -1,6 +1,5 @@
 target/
 src/main/Properties/values.properties
 PracticeStuff/
-src/main/java/com/prabh/SinkConnector/Config.java
-src/main/java/com/prabh/Utils/test.java
+src/main/java/com/prabh/Utils/Config.java
 
