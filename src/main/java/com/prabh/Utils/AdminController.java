@@ -2,6 +2,8 @@ package com.prabh.Utils;
 
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.CreateTopicsResult;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +27,26 @@ public class AdminController {
         } catch (ExecutionException | InterruptedException e) {
             logger.error("Topic List Retrieval failed");
             return null;
+        }
+    }
+
+    public void shutdown() {
+        logger.warn("Admin Controller Shutting down");
+        client.close();
+    }
+
+    public void create(NewTopic topic) {
+        if (exists(topic.name())) {
+            logger.warn("Asked Topic-{} already exists, skipping creation", topic.name());
+            return;
+        }
+
+        logger.warn("Creating topic {}", topic);
+        CreateTopicsResult result = client.createTopics(List.of(topic));
+        try {
+            result.all().get();
+        } catch (InterruptedException | ExecutionException e) {
+            logger.error(e.getMessage(), e);
         }
     }
 
