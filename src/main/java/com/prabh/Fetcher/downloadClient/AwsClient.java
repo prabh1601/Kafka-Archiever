@@ -1,4 +1,4 @@
-package com.prabh.SourceConnector.downloadClient;
+package com.prabh.Fetcher.downloadClient;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;

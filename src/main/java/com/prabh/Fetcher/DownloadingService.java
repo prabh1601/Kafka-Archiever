@@ -1,6 +1,6 @@
-package com.prabh.SourceConnector;
+package com.prabh.Fetcher;
 
-import com.prabh.SourceConnector.downloadClient.AwsClient;
+import com.prabh.Fetcher.downloadClient.AwsClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
