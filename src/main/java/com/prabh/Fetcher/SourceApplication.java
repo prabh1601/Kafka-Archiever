@@ -10,17 +10,22 @@ public class SourceApplication {
     private final DownloadingService downloadingService;
     private final ProducerService producerService;
     private final AdminController adminController;
+    private final NewTopic produceTopic;
     //    private final ProcessingService processingService;
 
     private SourceApplication(Builder builder) {
+        this.produceTopic = builder.produceTopic;
         this.adminController = new AdminController(builder.bootstrapId);
-        adminController.create(builder.produceTopic);
         this.producerService = new ProducerService(builder.produceTopic.name(), builder.bootstrapId);
-        this.downloadingService = new DownloadingService(builder.consumeTopic, builder.startStamp, builder.endStamp,
-                this.producerService);
+        this.downloadingService = new DownloadingService(builder.consumeTopic, builder.startStamp, builder.endStamp);
     }
 
     public void start() {
+        boolean ok = adminController.create(produceTopic);
+        if (!ok) {
+            logger.error("Application Start failed");
+            return;
+        }
         new Thread(downloadingService).start();
     }
 

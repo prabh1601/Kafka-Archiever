@@ -1,6 +1,7 @@
-package com.prabh.SinkConnector;
+package com.prabh.Archiver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.prabh.Utils.CompressionType;
 import com.prabh.Utils.Config;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -8,10 +9,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.ZoneId;
@@ -26,9 +24,11 @@ public class WriterService {
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
     private final UploaderService uploader;
+    private final CompressionType compressionType;
 
-    WriterService(int noOfConsumers, int taskPoolSize, UploaderService _uploader) {
+    WriterService(int noOfConsumers, int taskPoolSize, String _compressionType, UploaderService _uploader) {
         this.uploader = _uploader;
+        this.compressionType = CompressionType.getCompressionType(_compressionType);
         ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("WRITER-THREAD-%d").build();
         this.taskExecutor = Executors.newFixedThreadPool(taskPoolSize, namedThreadFactory);
         activeTasks = new ArrayList<>(noOfConsumers);
@@ -102,13 +102,14 @@ public class WriterService {
         private final AtomicLong currentOffset = new AtomicLong();
         private final ReentrantLock startStopLock = new ReentrantLock();
         private final CompletableFuture<Long> completion = new CompletableFuture<>();
+        private final ZonedDateTime zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
         private final int chunkSize = 10;
         private final String fileName;
 
         public WritingTask(List<ConsumerRecord<String, String>> _records, TopicPartition _partition) {
             this.records = _records;
             this.partition = _partition;
-            String writeDir = Config.WriterServiceDir + partition.topic();
+            String writeDir = Config.WriterServiceDir + "/" + partition.topic();
             new File(writeDir).mkdirs();
             this.fileName = writeDir + "/write-" + partition.partition() + ".txt";
         }
@@ -120,6 +121,13 @@ public class WriterService {
             return false;
         }
 
+        PrintWriter getWriter() throws IOException {
+            return new PrintWriter(
+                    compressionType.wrapCompressionStream(
+                            new BufferedOutputStream(
+                                    new FileOutputStream(fileName, true))));
+        }
+
         @Override
         public void run() {
             startStopLock.lock();
@@ -128,10 +136,10 @@ public class WriterService {
             startStopLock.unlock();
 
             try {
-                BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true));
+                PrintWriter writer = getWriter();
                 for (ConsumerRecord<String, String> record : records) {
                     if (stopped) break;
-                    writer.write(record.value() + "\n");
+                    writer.println(record.value());
                     currentOffset.set(record.offset() + 1);
                 }
 
@@ -149,9 +157,9 @@ public class WriterService {
         }
 
         String getKey(TopicPartition partition) {
-            ZonedDateTime zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
-            return "topics/" + partition.topic() + "/year=" + zdt.getYear() + "/month=" + zdt.getMonthValue() + "/date="
-                    + zdt.getDayOfMonth() + "/hour=" + zdt.getHour() + "/" + zdt.getMinute() + "-" + partition.partition();
+            return "topics/" + partition.topic() + "/" + zdt.getYear() + "/" + zdt.getMonthValue() + "/"
+                    + zdt.getDayOfMonth() + "/" + zdt.getHour() + "/" + zdt.getMinute() + "_"
+                    + zdt.getSecond() + "_" + partition.partition();
         }
 
         void uploadAndRotateShift() {
@@ -161,7 +169,7 @@ public class WriterService {
                 logger.error("{} failed to acquire semaphore", fileName);
             }
             File f_old = new File(fileName);
-            File f_new = new File(f_old.getParent() + "/" + partition.partition() + "-" + System.currentTimeMillis() + ".txt");
+            File f_new = new File(f_old.getParent() + "/upload-" + zdt.getMinute() + "-" + zdt.getSecond() + "-" + partition.partition() + ".txt");
             boolean renameStatus = f_old.renameTo(f_new);
             if (!renameStatus) {
                 logger.error("{} failed to stage for upload due to renaming failure", f_old.getName());

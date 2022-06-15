@@ -41,7 +41,6 @@ public class ConsumerService {
     }
 
     public void start() {
-
         for (int i = 0; i < noOfConsumers; i++) {
             ConsumerThread c = new ConsumerThread(i);
             workers.execute(c);
@@ -74,6 +73,10 @@ public class ConsumerService {
 
         public ConsumerThread(int consumerNumber) {
             this.consumerNo = consumerNumber;
+            this.consumer = createKafkaConsumer();
+        }
+
+        public KafkaConsumer<String, String> createKafkaConsumer() {
             Properties consumerProperties = new Properties();
             consumerProperties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, serverId);
             consumerProperties.put(ConsumerConfig.GROUP_ID_CONFIG, groupName);
@@ -82,13 +85,13 @@ public class ConsumerService {
             consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
             consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
             consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, 1000000);
-            this.consumer = new KafkaConsumer<>(consumerProperties);
+            return new KafkaConsumer<>(consumerProperties);
         }
 
         @Override
         public void run() {
             try {
-                logger.warn("{} Started",Thread.currentThread().getName());
+                logger.warn("{} Started", Thread.currentThread().getName());
 
                 consumer.subscribe(List.of(subscribedTopic), this);
                 while (!stopped.get()) {
@@ -107,7 +110,7 @@ public class ConsumerService {
             } finally {
                 consumer.close();
                 runningStatus.countDown();
-                logger.warn("{} Shutdown Successfully",Thread.currentThread().getName());
+                logger.warn("{} Shutdown Successfully", Thread.currentThread().getName());
             }
         }
 

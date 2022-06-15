@@ -19,10 +19,14 @@ public class SinkApplication {
             logger.error("Application Build Failed");
             throw new RuntimeException();
         }
+
         // Creating Uploader Client
         this.uploaderClient = new UploaderService();
+
         // Creating Writer Client
-        this.writerClient = new WriterService(builder.noOfConsumers, builder.noOfSimultaneousTask, uploaderClient);
+        this.writerClient = new WriterService(builder.noOfConsumers, builder.noOfSimultaneousTask,
+                builder.compressionType, uploaderClient);
+
         // Creating Consumer Client
         this.consumerClient = new ConsumerService(writerClient, builder.noOfConsumers, builder.groupName,
                 builder.serverId, builder.topic);
@@ -56,6 +60,7 @@ public class SinkApplication {
         public int noOfSimultaneousTask;
         public String groupName;
         public String topic;
+        public String compressionType;
 
         public Builder() {
 
@@ -88,6 +93,12 @@ public class SinkApplication {
         // Make sure this topic Exists
         public Builder subscribedTopic(String _topic) {
             this.topic = _topic;
+            return this;
+        }
+
+        // Available options so far : none, Gzip, snappy
+        public Builder compressionType(String type) {
+            this.compressionType = type;
             return this;
         }
 
