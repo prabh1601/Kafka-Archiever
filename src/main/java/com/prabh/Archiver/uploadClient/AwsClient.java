@@ -1,4 +1,4 @@
-package com.prabh.SinkConnector.uploadClient;
+package com.prabh.Archiver.uploadClient;
 
 import com.prabh.Utils.Config;
 import org.slf4j.Logger;

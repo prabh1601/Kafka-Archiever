@@ -1,4 +1,4 @@
-package com.prabh.SinkConnector;
+package com.prabh.Archiver;
 
 import com.prabh.Utils.AdminController;
 import org.slf4j.Logger;
@@ -60,7 +60,7 @@ public class SinkApplication {
         public int noOfSimultaneousTask;
         public String groupName;
         public String topic;
-        public String compressionType;
+        public String compressionType = "";
 
         public Builder() {
 

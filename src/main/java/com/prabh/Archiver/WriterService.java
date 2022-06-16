@@ -10,10 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -23,12 +19,15 @@ public class WriterService {
     private final Logger logger = LoggerFactory.getLogger(WriterService.class);
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
+    // Might as well keep this as a list instead of
+    private final ConcurrentHashMap<TopicPartition, Queue<ConsumerRecord<String, String>>> currentBatchBuffer = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TopicPartition, Long> currentBatchSize = new ConcurrentHashMap<>();
     private final UploaderService uploader;
-    private final CompressionType compressionType;
+    private final String compressionTypeName;
 
     WriterService(int noOfConsumers, int taskPoolSize, String _compressionType, UploaderService _uploader) {
         this.uploader = _uploader;
-        this.compressionType = CompressionType.getCompressionType(_compressionType);
+        this.compressionTypeName = _compressionType;
         ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("WRITER-THREAD-%d").build();
         this.taskExecutor = Executors.newFixedThreadPool(taskPoolSize, namedThreadFactory);
         activeTasks = new ArrayList<>(noOfConsumers);
@@ -102,30 +101,81 @@ public class WriterService {
         private final AtomicLong currentOffset = new AtomicLong();
         private final ReentrantLock startStopLock = new ReentrantLock();
         private final CompletableFuture<Long> completion = new CompletableFuture<>();
-        private final ZonedDateTime zdt = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
-        private final int chunkSize = 10;
-        private final String fileName;
+        private final CompressionType compressionType = CompressionType.getCompressionType(compressionTypeName);
+        private final String writeDir;
 
         public WritingTask(List<ConsumerRecord<String, String>> _records, TopicPartition _partition) {
             this.records = _records;
             this.partition = _partition;
-            String writeDir = Config.WriterServiceDir + "/" + partition.topic();
+            this.writeDir = Config.WriterServiceDir + "/" + partition.topic();
             new File(writeDir).mkdirs();
-            this.fileName = writeDir + "/write-" + partition.partition() + ".txt";
+            if (!currentBatchBuffer.containsKey(partition)) {
+                currentBatchBuffer.put(partition, new LinkedList<>());
+                currentBatchSize.put(partition, (long) 0);
+            }
         }
 
-        boolean readyForUpload() throws IOException {
-            long fileSizeInMB = Files.size(Paths.get(fileName)) / (1024 * 1024);
-            if (fileSizeInMB > chunkSize) return true;
+
+        public long getBatchTimeStamp() throws NullPointerException {
+            return Objects.requireNonNull(currentBatchBuffer.get(partition).peek()).timestamp();
+        }
+
+        public String getBatchFileName() throws NullPointerException {
+            long startingOffset = Objects.requireNonNull(currentBatchBuffer.get(partition).peek()).offset();
+            long timestampInMillis = getBatchTimeStamp();
+            Calendar c = Calendar.getInstance();
+            c.setTimeInMillis(timestampInMillis);
+            return c.get(Calendar.MINUTE) + "_" + partition.partition() + "_" + startingOffset;
+        }
+
+        // Still pending Benchmarks and optimizations
+        PrintWriter getWriter() throws IOException {
+            String fileName = getBatchFileName();
+            String filePath = writeDir + "/" + fileName;
+            return new PrintWriter(
+                    compressionType.wrapOutputStream(
+                            new BufferedOutputStream(
+                                    new FileOutputStream(filePath, true))));
+        }
+
+        public String commitBatch() {
+            currentBatchSize.put(partition, (long) 0);
+            String fileName = getBatchFileName();
+            Queue<ConsumerRecord<String, String>> batch = currentBatchBuffer.get(partition);
+
+            try (PrintWriter writer = getWriter()) {
+                while (!batch.isEmpty()) {
+                    ConsumerRecord<String, String> record = batch.poll();
+                    writer.println(record.value());
+                }
+
+            } catch (IOException e) {
+                logger.info("Still pending IOException Handling");
+            }
+
+            return fileName;
+        }
+
+
+        boolean readyForUpload(long currentRecordStamp) throws IOException {
+            Queue<ConsumerRecord<String, String>> batch = currentBatchBuffer.get(partition);
+            if (batch.isEmpty()) return false;
+
+            // Check Chunk Duration
+            long startRecordStamp = batch.peek().timestamp();
+            long durationInMillis = currentRecordStamp - startRecordStamp;
+            if (durationInMillis > Config.maxBatchDurationInMillis) return true;
+
+            // Check Chunk Size
+            if (currentBatchSize.get(partition) > Config.maxChunkSizeInBytes) return true;
 
             return false;
         }
 
-        PrintWriter getWriter() throws IOException {
-            return new PrintWriter(
-                    compressionType.wrapCompressionStream(
-                            new BufferedOutputStream(
-                                    new FileOutputStream(fileName, true))));
+        public void addToBuffer(ConsumerRecord<String, String> record) {
+            currentBatchBuffer.get(partition).add(record);
+            long recordSize = record.serializedValueSize();
+            currentBatchSize.put(partition, currentBatchSize.get(partition) + recordSize);
         }
 
         @Override
@@ -136,45 +186,39 @@ public class WriterService {
             startStopLock.unlock();
 
             try {
-                PrintWriter writer = getWriter();
                 for (ConsumerRecord<String, String> record : records) {
                     if (stopped) break;
-                    writer.println(record.value());
+                    if (readyForUpload(record.timestamp())) {
+                        long timeStampInMillis = getBatchTimeStamp();
+                        String fileName = commitBatch();
+                        String filePath = writeDir + "/" + fileName;
+                        String key = getKey(timeStampInMillis, fileName);
+                        stageBatchForUpload(filePath, key);
+                    }
+
+                    addToBuffer(record);
                     currentOffset.set(record.offset() + 1);
                 }
-
-                writer.close();
-
-                if (readyForUpload()) {
-                    uploadAndRotateShift();
-                }
             } catch (IOException e) {
-                logger.error("IOException while writing into local files");
+                logger.error("Still pending IOException Handling");
+            } catch (InterruptedException e) {
+                logger.error("Still pending InterruptedException Handling");
             }
 
             finished = true;
             completion.complete(currentOffset.get());
         }
 
-        String getKey(TopicPartition partition) {
-            return "topics/" + partition.topic() + "/" + zdt.getYear() + "/" + zdt.getMonthValue() + "/"
-                    + zdt.getDayOfMonth() + "/" + zdt.getHour() + "/" + zdt.getMinute() + "_"
-                    + zdt.getSecond() + "_" + partition.partition();
+        String getKey(long timeStampInMillis, String fileName) {
+            Calendar c = Calendar.getInstance();
+            c.setTimeInMillis(timeStampInMillis);
+            return "topics/" + partition.topic() + "/" + c.get(Calendar.YEAR) + "/" + c.get(Calendar.MONTH) + "/"
+                    + c.get(Calendar.DAY_OF_MONTH) + "/" + c.get(Calendar.HOUR) + "/" + fileName;
         }
 
-        void uploadAndRotateShift() {
-            try {
-                uploader.semaphore.acquire();
-            } catch (Exception e) {
-                logger.error("{} failed to acquire semaphore", fileName);
-            }
-            File f_old = new File(fileName);
-            File f_new = new File(f_old.getParent() + "/upload-" + zdt.getMinute() + "-" + zdt.getSecond() + "-" + partition.partition() + ".txt");
-            boolean renameStatus = f_old.renameTo(f_new);
-            if (!renameStatus) {
-                logger.error("{} failed to stage for upload due to renaming failure", f_old.getName());
-            }
-            uploader.upload(f_new, getKey(partition));
+        void stageBatchForUpload(String filePath, String key) throws InterruptedException {
+            uploader.semaphore.acquire();
+            uploader.upload(new File(filePath), key);
         }
 
         public long getCurrentOffset() {

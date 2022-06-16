@@ -1,4 +1,4 @@
-package com.prabh.SinkConnector;
+package com.prabh.Archiver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.kafka.clients.consumer.*;
