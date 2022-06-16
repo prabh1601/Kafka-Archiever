@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -19,11 +20,12 @@ public class WriterService {
     private final Logger logger = LoggerFactory.getLogger(WriterService.class);
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    // Might as well keep this as a list instead of
+    // Might as well keep this as a list instead of map
     private final ConcurrentHashMap<TopicPartition, Queue<ConsumerRecord<String, String>>> currentBatchBuffer = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<TopicPartition, Long> currentBatchSize = new ConcurrentHashMap<>();
     private final UploaderService uploader;
     private final String compressionTypeName;
+    private final AtomicInteger batchNo = new AtomicInteger();
 
     WriterService(int noOfConsumers, int taskPoolSize, String _compressionType, UploaderService _uploader) {
         this.uploader = _uploader;
@@ -125,7 +127,7 @@ public class WriterService {
             long timestampInMillis = getBatchTimeStamp();
             Calendar c = Calendar.getInstance();
             c.setTimeInMillis(timestampInMillis);
-            return c.get(Calendar.MINUTE) + "_" + partition.partition() + "_" + startingOffset;
+            return c.get(Calendar.MINUTE) + "_" + partition.partition() + "_" + startingOffset + "." + compressionType.extension;
         }
 
         // Still pending Benchmarks and optimizations
@@ -212,8 +214,8 @@ public class WriterService {
         String getKey(long timeStampInMillis, String fileName) {
             Calendar c = Calendar.getInstance();
             c.setTimeInMillis(timeStampInMillis);
-            return "topics/" + partition.topic() + "/" + c.get(Calendar.YEAR) + "/" + c.get(Calendar.MONTH) + "/"
-                    + c.get(Calendar.DAY_OF_MONTH) + "/" + c.get(Calendar.HOUR) + "/" + fileName;
+            return "topics/" + partition.topic() + "/" + c.get(Calendar.YEAR) + "/" + (c.get(Calendar.MONTH) + 1) + "/"
+                    + c.get(Calendar.DAY_OF_MONTH) + "/" + c.get(Calendar.HOUR_OF_DAY) + "/" + fileName;
         }
 
         void stageBatchForUpload(String filePath, String key) throws InterruptedException {
