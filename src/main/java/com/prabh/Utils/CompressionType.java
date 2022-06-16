@@ -13,20 +13,20 @@ import java.util.zip.GZIPOutputStream;
 
 public enum CompressionType {
     // Raw Plain Text
-    NONE("none", ".txt"),
+    NONE("none", ""),
 
     // Gzip
-    GZIP("gzip", ".gz") {
+    GZIP("gzip", "gz") {
         private static final int GZIP_BUFFER_SIZE_BYTES = 8 * 1024;
         // 8 KB -> the default value that is used for buffered reader
 
         @Override
-        public OutputStream wrapCompressionStream(OutputStream out) throws IOException {
-            return wrapCompressionStream(out, Deflater.DEFAULT_COMPRESSION);
+        public OutputStream wrapOutputStream(OutputStream out) throws IOException {
+            return wrapOutputStream(out, Deflater.DEFAULT_COMPRESSION);
         }
 
         @Override
-        public OutputStream wrapCompressionStream(OutputStream out, int level) throws IOException {
+        public OutputStream wrapOutputStream(OutputStream out, int level) throws IOException {
             return new GZIPOutputStream(out, GZIP_BUFFER_SIZE_BYTES) {
                 public OutputStream setLevel(int level) {
                     def.setLevel(level);
@@ -36,20 +36,20 @@ public enum CompressionType {
         }
 
         @Override
-        public InputStream wrapCompressionStream(InputStream in) throws IOException {
+        public InputStream wrapInputStream(InputStream in) throws IOException {
             return new GZIPInputStream(in);
         }
     },
 
     // Snappy
-    SNAPPY("snappy", ".snappy") {
+    SNAPPY("snappy", "snappy") {
         @Override
-        public OutputStream wrapCompressionStream(OutputStream out) throws IOException {
+        public OutputStream wrapOutputStream(OutputStream out) throws IOException {
             return new SnappyOutputStream(out);
         }
 
         @Override
-        public InputStream wrapCompressionStream(InputStream in) throws IOException {
+        public InputStream wrapInputStream(InputStream in) throws IOException {
             return new SnappyInputStream(in);
         }
     };
@@ -57,16 +57,16 @@ public enum CompressionType {
     // Add Any other Compression type
     // The current design is made upon the assumption that compression types support input/output streams.
 
-    private final String name;
-    private final String extension;
+    public final String name;
+    public final String extension;
 
     public static CompressionType getCompressionType(String name) {
         name = name.toLowerCase();
-        if (name.equals(NONE.name)) {
+        if (name.equals(NONE.name) || name.equals(NONE.extension)) {
             return NONE;
-        } else if (name.equals(GZIP.name)) {
+        } else if (name.equals(GZIP.name) || name.equals(GZIP.extension)) {
             return GZIP;
-        } else if (name.equals(SNAPPY.name)) {
+        } else if (name.equals(SNAPPY.name) || name.equals(SNAPPY.extension)) {
             return SNAPPY;
         } else {
             throw new IllegalArgumentException("""
@@ -81,15 +81,15 @@ public enum CompressionType {
         this.extension = _extension;
     }
 
-    public OutputStream wrapCompressionStream(OutputStream out) throws IOException {
+    public OutputStream wrapOutputStream(OutputStream out) throws IOException {
         return out;
     }
 
-    public OutputStream wrapCompressionStream(OutputStream out, int level) throws IOException {
-        return wrapCompressionStream(out);
+    public OutputStream wrapOutputStream(OutputStream out, int level) throws IOException {
+        return wrapOutputStream(out);
     }
 
-    public InputStream wrapCompressionStream(InputStream in) throws IOException {
+    public InputStream wrapInputStream(InputStream in) throws IOException {
         return in;
     }
 }

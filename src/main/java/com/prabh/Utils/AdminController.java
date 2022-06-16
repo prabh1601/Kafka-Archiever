@@ -35,18 +35,20 @@ public class AdminController {
         client.close();
     }
 
-    public void create(NewTopic topic) {
+    public boolean create(NewTopic topic) {
         if (exists(topic.name())) {
             logger.warn("Asked Topic-{} already exists, skipping creation", topic.name());
-            return;
+            return true;
         }
 
         logger.warn("Creating topic {}", topic);
         CreateTopicsResult result = client.createTopics(List.of(topic));
         try {
             result.all().get();
+            return true;
         } catch (InterruptedException | ExecutionException e) {
             logger.error(e.getMessage(), e);
+            return false;
         }
     }
 
