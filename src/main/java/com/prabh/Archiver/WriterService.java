@@ -20,12 +20,10 @@ public class WriterService {
     private final Logger logger = LoggerFactory.getLogger(WriterService.class);
     private final ExecutorService taskExecutor;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    // Might as well keep this as a list instead of map
     private final ConcurrentHashMap<TopicPartition, Queue<ConsumerRecord<String, String>>> currentBatchBuffer = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<TopicPartition, Long> currentBatchSize = new ConcurrentHashMap<>();
     private final UploaderService uploader;
     private final String compressionTypeName;
-    private final AtomicInteger batchNo = new AtomicInteger();
 
     WriterService(int noOfConsumers, int taskPoolSize, String _compressionType, UploaderService _uploader) {
         this.uploader = _uploader;
@@ -117,7 +115,6 @@ public class WriterService {
             }
         }
 
-
         public long getBatchTimeStamp() throws NullPointerException {
             return Objects.requireNonNull(currentBatchBuffer.get(partition).peek()).timestamp();
         }
@@ -159,7 +156,7 @@ public class WriterService {
         }
 
 
-        boolean readyForUpload(long currentRecordStamp) throws IOException {
+        boolean readyForCommit(long currentRecordStamp) throws IOException {
             Queue<ConsumerRecord<String, String>> batch = currentBatchBuffer.get(partition);
             if (batch.isEmpty()) return false;
 
@@ -190,7 +187,7 @@ public class WriterService {
             try {
                 for (ConsumerRecord<String, String> record : records) {
                     if (stopped) break;
-                    if (readyForUpload(record.timestamp())) {
+                    if (readyForCommit(record.timestamp())) {
                         long timeStampInMillis = getBatchTimeStamp();
                         String fileName = commitBatch();
                         String filePath = writeDir + "/" + fileName;
