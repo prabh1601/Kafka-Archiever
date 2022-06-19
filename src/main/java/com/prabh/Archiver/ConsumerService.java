@@ -10,39 +10,36 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConsumerService {
     private final Logger logger = LoggerFactory.getLogger(ConsumerService.class);
-    private final List<ConsumerThread> consumers;
-    private final Executor workers;
-    private final WriterService writer;
+    private final List<ConsumerWorker> consumers;
+    private final ExecutorService workers;
+    private final WriteService writer;
     private final CountDownLatch runningStatus;
     private final int noOfConsumers;
     private final String groupName;
     private final String serverId;
-    private final String subscribedTopic;
+    private final List<String> subscribedTopics;
 
-    ConsumerService(WriterService _writer, int _noOfConsumers, String _groupName, String _serverId, String _topic) {
+    ConsumerService(WriteService _writer, int _noOfConsumers, String _groupName, String _serverId, List<String> topics) {
         this.writer = _writer;
         this.groupName = _groupName;
         this.serverId = _serverId;
         this.noOfConsumers = _noOfConsumers;
 
-        ThreadFactory tf = new ThreadFactoryBuilder().setNameFormat("CONSUMER-THREAD-%d").build();
+        ThreadFactory tf = new ThreadFactoryBuilder().setNameFormat("CONSUMER-WORKER-%d").build();
         this.workers = Executors.newFixedThreadPool(noOfConsumers, tf);
         this.runningStatus = new CountDownLatch(this.noOfConsumers);
         this.consumers = new ArrayList<>(_noOfConsumers);
-        this.subscribedTopic = _topic;
+        this.subscribedTopics = topics;
     }
 
     public void start() {
         for (int i = 0; i < noOfConsumers; i++) {
-            ConsumerThread c = new ConsumerThread(i);
+            ConsumerWorker c = new ConsumerWorker(i);
             workers.execute(c);
             synchronized (consumers) {
                 consumers.add(c);
@@ -52,9 +49,10 @@ public class ConsumerService {
 
     public void shutdown() {
         synchronized (consumers) {
-            consumers.forEach(ConsumerThread::stopConsumer);
+            consumers.forEach(ConsumerWorker::stopConsumer);
             consumers.clear();
         }
+        workers.shutdown();
         try {
             runningStatus.await();
         } catch (InterruptedException e) {
@@ -63,15 +61,15 @@ public class ConsumerService {
         logger.warn("Consumer Client Shutdown Complete");
     }
 
-    private class ConsumerThread extends Thread implements ConsumerRebalanceListener {
-        private final Logger logger = LoggerFactory.getLogger(ConsumerThread.class.getName());
+    private class ConsumerWorker extends Thread implements ConsumerRebalanceListener {
+        private final Logger logger = LoggerFactory.getLogger(ConsumerWorker.class.getName());
         private final KafkaConsumer<String, String> consumer;
         private final AtomicBoolean stopped = new AtomicBoolean(false);
         private final Map<TopicPartition, OffsetAndMetadata> pendingOffsets = new HashMap<>();
         private final int consumerNo;
         private long lastCommitTime = System.currentTimeMillis();
 
-        public ConsumerThread(int consumerNumber) {
+        public ConsumerWorker(int consumerNumber) {
             this.consumerNo = consumerNumber;
             this.consumer = createKafkaConsumer();
         }
@@ -85,8 +83,8 @@ public class ConsumerService {
             consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
             consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
             consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, Integer.MAX_VALUE);
-            consumerProperties.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, Integer.MAX_VALUE);
-            consumerProperties.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, Integer.MAX_VALUE);
+            consumerProperties.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 100 * 1024 * 1024);
+            consumerProperties.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 200 * 1024 * 1024);
             return new KafkaConsumer<>(consumerProperties);
         }
 
@@ -95,7 +93,7 @@ public class ConsumerService {
             try {
                 logger.warn("{} Started", Thread.currentThread().getName());
 
-                consumer.subscribe(List.of(subscribedTopic), this);
+                consumer.subscribe(subscribedTopics, this);
                 while (!stopped.get()) {
                     ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
                     if (!records.isEmpty()) {
