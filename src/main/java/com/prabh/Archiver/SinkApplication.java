@@ -1,14 +1,17 @@
 package com.prabh.Archiver;
 
 import com.prabh.Utils.AdminController;
+import com.prabh.Utils.CompressionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 public class SinkApplication {
     private final Logger logger = LoggerFactory.getLogger(SinkApplication.class);
     private final ConsumerService consumerClient;
-    private final WriterService writerClient;
-    private final UploaderService uploaderClient;
+    private final WriteService writerClient;
+    private final UploadService uploadClient;
     private final AdminController adminController;
 
     private SinkApplication(Builder builder) {
@@ -20,21 +23,19 @@ public class SinkApplication {
             throw new RuntimeException();
         }
 
-        // Creating Uploader Client
-        this.uploaderClient = new UploaderService();
+//         Creating Uploader Client
+        this.uploadClient = new UploadService(builder.bucket);
 
-        // Creating Writer Client
-        this.writerClient = new WriterService(builder.noOfConsumers, builder.noOfSimultaneousTask,
-                builder.compressionType, uploaderClient);
+//         Creating Writer Client
+        this.writerClient = new WriteService(builder.noOfConsumers, builder.noOfSimultaneousTask, builder.compressionType, uploadClient);
 
-        // Creating Consumer Client
-        this.consumerClient = new ConsumerService(writerClient, builder.noOfConsumers, builder.groupName,
-                builder.serverId, builder.topic);
+//         Creating Consumer Client
+        this.consumerClient = new ConsumerService(writerClient, builder.noOfConsumers, builder.groupName, builder.serverId, builder.subscribedTopics);
     }
 
     private boolean validateConfig(Builder builder) {
         // Validate Topic
-        if (!adminController.exists(builder.topic)) {
+        if (!adminController.exists(builder.subscribedTopics)) {
             logger.error("Build Failed in attempt of subscribing non-existing topic");
             return false;
         }
@@ -50,17 +51,18 @@ public class SinkApplication {
     public void shutdown() {
         consumerClient.shutdown();
         writerClient.shutdown();
-        uploaderClient.shutdown();
+        uploadClient.shutdown();
         adminController.shutdown();
     }
 
     public static class Builder {
         public String serverId;
-        public int noOfConsumers;
-        public int noOfSimultaneousTask;
         public String groupName;
-        public String topic;
-        public String compressionType = "";
+        public List<String> subscribedTopics;
+        public int noOfConsumers = 5;
+        public int noOfSimultaneousTask = 5;
+        public String bucket;
+        public CompressionType compressionType = CompressionType.NONE;
 
         public Builder() {
 
@@ -92,18 +94,29 @@ public class SinkApplication {
 
         // Make sure this topic Exists
         public Builder subscribedTopic(String _topic) {
-            this.topic = _topic;
+            this.subscribedTopics = List.of(_topic);
+            return this;
+        }
+
+        public Builder subscribedTopics(List<String> _topics) {
+            this.subscribedTopics = _topics;
             return this;
         }
 
         // Available options so far : none, Gzip, snappy
-        public Builder compressionType(String type) {
-            this.compressionType = type;
+        public Builder compressionType(CompressionType _type) {
+            this.compressionType = _type;
+            return this;
+        }
+
+        public Builder sinkBucket(String _bucket) {
+            this.bucket = _bucket;
             return this;
         }
 
         public SinkApplication build() {
             return new SinkApplication(this);
         }
+
     }
 }

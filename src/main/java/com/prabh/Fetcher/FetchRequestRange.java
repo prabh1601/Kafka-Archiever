@@ -1,16 +1,17 @@
-package com.prabh.SourceConnector;
+package com.prabh.Fetcher;
 
+import java.util.Calendar;
 import java.util.List;
 
-public class RequestObject {
+public class FetchRequest {
     private static int depth = 5;
     final List<Integer> currentValue;
 
-    private RequestObject(StartTimestampBuilder builder) {
+    private FetchRequest(StartTimestampBuilder builder) {
         this.currentValue = builder.timestampParameters;
     }
 
-    private RequestObject(EndTimestampBuilder builder) {
+    private FetchRequest(EndTimestampBuilder builder) {
         this.currentValue = builder.timestampParameters;
     }
 
@@ -33,12 +34,18 @@ public class RequestObject {
             this(year, month, 0);
         }
 
-        public StartTimestampBuilder(int year) {
-            this(year, 0);
+        public StartTimestampBuilder(int epochInMillis) {
+            Calendar c = Calendar.getInstance();
+            c.setTimeInMillis(epochInMillis);
+            this(c.get(Calendar.YEAR),
+                    c.get(Calendar.MONTH) + 1,
+                    c.get(Calendar.DAY_OF_MONTH),
+                    c.get(Calendar.HOUR_OF_DAY),
+                    c.get(Calendar.MINUTE));
         }
 
-        public RequestObject build() {
-            return new RequestObject(this);
+        public FetchRequest build() {
+            return new FetchRequest(this);
         }
     }
 
@@ -46,7 +53,7 @@ public class RequestObject {
         List<Integer> timestampParameters;
 
         public EndTimestampBuilder(int year, int month, int date, int hour, int min) {
-            timestampParameters = List.of(-1,year, month, date, hour, min);
+            timestampParameters = List.of(-1, year, month, date, hour, min);
         }
 
         public EndTimestampBuilder(int year, int month, int date, int hour) {
@@ -65,8 +72,8 @@ public class RequestObject {
             this(year, 12);
         }
 
-        public RequestObject build() {
-            return new RequestObject(this);
+        public FetchRequest build() {
+            return new FetchRequest(this);
         }
 
     }

@@ -1,33 +1,29 @@
 package com.prabh.Archiver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.prabh.Utils.Pair;
+import com.prabh.Utils.CompressionType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.common.internals.Topic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class WriterService {
-    private final Logger logger = LoggerFactory.getLogger(WriterService.class);
+public class WriteService {
+    private final Logger logger = LoggerFactory.getLogger(WriteService.class);
     private final ExecutorService taskExecutor;
-    private final String compressionTypeName;
+    private final CompressionType compressionType;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    private final BlockingQueue<Pair<File, String>> stagedUploads;
+    private final ConcurrentHashMap<TopicPartition, PartitionBatchInMemory> activeBatches = new ConcurrentHashMap<>();
+    private final UploadService uploadService;
 
-    // Batch Parameters
-    private final ConcurrentHashMap<TopicPartition, TopicBatch> activeBatches = new ConcurrentHashMap<>();
-
-    WriterService(int noOfConsumers, int taskPoolSize, String _compressionType, BlockingQueue<Pair<File, String>> _stagedUploads) {
-        this.stagedUploads = _stagedUploads;
-        this.compressionTypeName = _compressionType;
+    public WriteService(int noOfConsumers, int taskPoolSize, CompressionType _compressionType, UploadService _uploadService) {
+        this.uploadService = _uploadService;
+        this.compressionType = _compressionType;
         ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("WRITER-%d").build();
         this.taskExecutor = Executors.newFixedThreadPool(taskPoolSize, namedThreadFactory);
         activeTasks = new ArrayList<>(noOfConsumers);
@@ -88,7 +84,34 @@ public class WriterService {
         } catch (InterruptedException e) {
             logger.error(e.getMessage(), e);
         }
+
+        Set<TopicPartition> pendingBatches = activeBatches.keySet();
+        pendingBatches.forEach(this::commitBatch);
         logger.warn("Writing Client Shutdown complete");
+    }
+
+    boolean readyForCommit(TopicPartition partition) {
+        if (!activeBatches.containsKey(partition)) {
+            return false;
+        }
+
+        return activeBatches.get(partition).readyForCommit();
+    }
+
+    public void addToBuffer(TopicPartition partition, ConsumerRecord<String, String> record) {
+        activeBatches.get(partition).addToBuffer(record);
+    }
+
+    public void initializeNewBatch(TopicPartition partition, ConsumerRecord<String, String> record) {
+        PartitionBatchInMemory batch = new PartitionBatchInMemory(record, compressionType);
+        activeBatches.put(partition, batch);
+    }
+
+    public void commitBatch(TopicPartition partition) {
+        PartitionBatchInMemory batch = activeBatches.get(partition);
+        byte[] b = batch.commitBatch();
+        uploadService.submit(b, batch.getKey());
+        activeBatches.remove(partition);
     }
 
     private class WritingTask implements Runnable {
@@ -107,33 +130,6 @@ public class WriterService {
             this.partition = _partition;
         }
 
-        boolean readyForCommit() {
-            if (!activeBatches.containsKey(partition)) {
-                return false;
-            }
-
-            return activeBatches.get(partition).readyForCommit();
-        }
-
-        public void addToBuffer(ConsumerRecord<String, String> record) {
-            activeBatches.get(partition).addToBuffer(record);
-        }
-
-        public void initializeNewBatch(ConsumerRecord<String, String> record) {
-            TopicBatch batch = new TopicBatch(record, compressionTypeName);
-            activeBatches.put(partition, batch);
-        }
-
-        public void commitBatch() {
-            TopicBatch batch = activeBatches.get(partition);
-            batch.commitBatch();
-            activeBatches.remove(partition);
-        }
-
-        public void stageForUpload(TopicBatch batch) {
-
-        }
-
         @Override
         public void run() {
             startStopLock.lock();
@@ -143,15 +139,15 @@ public class WriterService {
 
             for (ConsumerRecord<String, String> record : records) {
                 if (stopped) break;
-                if (readyForCommit()) {
-                    commitBatch();
+                if (readyForCommit(partition)) {
+                    commitBatch(partition);
                 }
 
                 if (!activeBatches.containsKey(partition)) {
-                    initializeNewBatch(record);
+                    initializeNewBatch(partition, record);
                 }
 
-                addToBuffer(record);
+                addToBuffer(partition, record);
                 currentOffset.set(record.offset() + 1);
             }
 

@@ -24,7 +24,7 @@ public class ConsumerService {
     private final String serverId;
     private final List<String> subscribedTopics;
 
-    ConsumerService(WriteService _writer, int _noOfConsumers, String _groupName, String _serverId, List<String> topics) {
+    public ConsumerService(WriteService _writer, int _noOfConsumers, String _groupName, String _serverId, List<String> topics) {
         this.writer = _writer;
         this.groupName = _groupName;
         this.serverId = _serverId;
@@ -82,9 +82,6 @@ public class ConsumerService {
             consumerProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
             consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-            consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, Integer.MAX_VALUE);
-            consumerProperties.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 100 * 1024 * 1024);
-            consumerProperties.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 200 * 1024 * 1024);
             return new KafkaConsumer<>(consumerProperties);
         }
 
@@ -95,7 +92,7 @@ public class ConsumerService {
 
                 consumer.subscribe(subscribedTopics, this);
                 while (!stopped.get()) {
-                    ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+                    ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(2000));
                     if (!records.isEmpty()) {
                         log(records); // makes logs too messy : rather get some better method
                         handleFetchedRecords(records);
