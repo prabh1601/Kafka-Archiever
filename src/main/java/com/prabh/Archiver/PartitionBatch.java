@@ -8,8 +8,8 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.util.Calendar;
 
-public class PartitionBatchInMemory {
-    private final Logger logger = LoggerFactory.getLogger(PartitionBatchInMemory.class);
+public class PartitionBatchMemory {
+    private final Logger logger = LoggerFactory.getLogger(PartitionBatchMemory.class);
     private final CompressionType compressionType;
     private final BufferedOutputStream out;
     private final ConsumerRecord<String, String> leaderRecord;
@@ -18,7 +18,7 @@ public class PartitionBatchInMemory {
     private int currentBatchSize = 0;
     private final ByteArrayOutputStream bStream = new ByteArrayOutputStream(maxBatchingSize);
 
-    public PartitionBatchInMemory(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
+    public PartitionBatchMemory(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
         this.leaderRecord = _leaderRecord;
         this.compressionType = _compressionType;
         this.out = getOutputStream();

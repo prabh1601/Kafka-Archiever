@@ -17,8 +17,7 @@ public class SourceApplication {
 
     private SourceApplication(Builder builder) {
         this.produceTopic = builder.produceTopic;
-        String localDumpLocation = String.format("%s/S3ToKafkaReplay/%d", System.getProperty("java.io.tmpdir"),
-                System.currentTimeMillis());
+        String localDumpLocation = String.format("%s/S3ToKafkaReplay/%d", System.getProperty("java.io.tmpdir"), System.currentTimeMillis());
         this.adminController = new AdminController(builder.bootstrapId);
         this.producerService = new ProducerService(builder.produceTopic.name(), builder.bootstrapId, localDumpLocation,
                 builder.producerThreadCount);
@@ -51,7 +50,7 @@ public class SourceApplication {
         private String bucket;
         private String bootstrapId;
         private NewTopic produceTopic;
-        private int producerThreadCount = 5;
+        private int producerThreadCount = 10;
         private int downloadThreadCount = 5;
         private boolean stream = false;
 

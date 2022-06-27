@@ -53,13 +53,14 @@ public class DownloadService {
         workers.shutdown();
         try {
             workers.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+            s3Client.close();
+            logger.info("Downloads Completed");
+            logger.warn("Download Service Shutting down");
+            producerService.shutdown();
         } catch (InterruptedException e) {
             logger.error(e.getMessage());
             Thread.currentThread().interrupt();  // set interrupt flag
         }
-        s3Client.close();
-        logger.info("Downloads Completed");
-        logger.warn("Download Service Shutting down");
     }
 
     public String getValidPrefix(int depth, List<Integer> state) {
@@ -76,20 +77,16 @@ public class DownloadService {
             ListObjectsV2Request listObjects = ListObjectsV2Request.builder().bucket(bucket).prefix(keyPrefix).build();
 
             boolean done = false;
-            System.err.println(keyPrefix);
             while (!done) {
                 ListObjectsV2Response listObjResponse = s3Client.listObjectsV2(listObjects);
                 for (S3Object content : listObjResponse.contents()) {
-                    System.out.println(content.key());
                     writer.write(content.key() + "\n");
                 }
 
                 done = !listObjResponse.isTruncated();
                 String nextToken = listObjResponse.nextContinuationToken();
                 if (nextToken != null) {
-                    listObjects = listObjects.toBuilder()
-                            .continuationToken(listObjResponse.nextContinuationToken())
-                            .build();
+                    listObjects = listObjects.toBuilder().continuationToken(listObjResponse.nextContinuationToken()).build();
                 }
             }
         } catch (S3Exception e) {
@@ -130,6 +127,7 @@ public class DownloadService {
         }
 
         public void downloadStream() {
+            logger.warn("Operating in In Memory Mode");
             GetObjectRequest request = GetObjectRequest.builder().bucket(bucket).key(key).build();
             ResponseBytes<GetObjectResponse> response = s3Client.getObject(request, ResponseTransformer.toBytes());
             File f = new File(localFileName);
@@ -140,9 +138,8 @@ public class DownloadService {
             producerService.submit(f.getName(), response.asByteArray());
         }
 
-
         public void run() {
-            if(streamDownload){
+            if (streamDownload) {
                 downloadStream();
             } else {
                 downloadFile();

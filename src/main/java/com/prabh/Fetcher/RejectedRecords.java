@@ -1,6 +1,6 @@
 package com.prabh.Fetcher;
 
-import org.apache.kafka.clients.producer.Callback;
+import com.prabh.Utils.Pair;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -10,45 +10,72 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class RejectedRecords {
+public class RejectedRecords implements Runnable {
     private batch b;
     private final KafkaProducer<String, String> producer;
     private final String topic;
     private int rejectedBatchCount = 0;
     private final Logger logger = LoggerFactory.getLogger(RejectedRecords.class);
     private final String localDumpLocation;
+    private final BlockingQueue<Pair<Future<RecordMetadata>, String>> rejectedRecords;
+    private final AtomicBoolean stopped = new AtomicBoolean(false);
 
     public RejectedRecords(String _localDumpLocation, KafkaProducer<String, String> _producer, String topic) {
         this.localDumpLocation = _localDumpLocation;
         this.producer = _producer;
         this.topic = topic;
-    }
-
-    public void retry(String record, Exception e, int t) {
-        int noOfRetries = 2;
-        if (t >= noOfRetries) {
-            if (b == null || b.readyForCommit() == 2) {
-                rejectedBatchCount++;
-                b = new batch(rejectedBatchCount);
-            }
-            logger.error("Rejected Record written to local cache : {}\n Triggered Exception : {}", record, e.getMessage());
-            b.add(record);
-            return;
-        }
-
-        producer.send(new ProducerRecord<>(topic, null, record), new Callback() {
-            @Override
-            public void onCompletion(RecordMetadata recordMetadata, Exception e) {
-                if (e != null) {
-                    retry(record, e, t + 1);
-                }
-            }
-        });
+        this.rejectedRecords = new ArrayBlockingQueue<>(1000);
     }
 
     public void shutdown() {
-        b.flush();
+        stopped.set(true);
+    }
+
+    public void submit(String record, Future<RecordMetadata> f) {
+        try {
+            rejectedRecords.put(new Pair<>(f, record));
+        } catch (InterruptedException e) {
+            logger.error(e.getMessage());
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    public void run() {
+        while (!stopped.get() || !rejectedRecords.isEmpty()) {
+            Pair<Future<RecordMetadata>, String> p = rejectedRecords.poll();
+            if (p != null) {
+                System.out.println(p.second);
+                try {
+                    p.first.get();
+                } catch (ExecutionException | InterruptedException e) {
+                    try {
+                        producer.send(new ProducerRecord<>(topic, null, p.second)).get();
+                    } catch (ExecutionException ex) {
+                        putToLocalCache(p.second);
+                    } catch (InterruptedException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                }
+            }
+        }
+        if (b != null) {
+            b.flush();
+        }
+    }
+
+    public void putToLocalCache(String record) {
+        if (b == null || b.readyForCommit() == 2) {
+            rejectedBatchCount++;
+            b = new batch(rejectedBatchCount);
+        }
+        logger.error("Rejected Record written to local cache : {}\n", record);
+        b.add(record);
     }
 
     private class batch {
@@ -58,7 +85,7 @@ public class RejectedRecords {
         private final Queue<String> buffer = new LinkedList<>();
 
         batch(int rejectedBatchNo) {
-            this.fileName = localDumpLocation + "Rejected/Batch" + rejectedBatchNo;
+            this.fileName = localDumpLocation + "/Rejected/Batch" + rejectedBatchNo;
         }
 
         public void add(String record) {

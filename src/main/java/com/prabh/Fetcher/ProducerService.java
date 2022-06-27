@@ -5,6 +5,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.prabh.Utils.CompressionType;
 
 import com.prabh.Utils.LimitedQueue;
+import com.prabh.Utils.TPSCalculator;
 import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.slf4j.Logger;
@@ -34,6 +35,7 @@ public class ProducerService {
                 namedThreadFactory);
 
         this.rejectedRecords = new RejectedRecords(_localDumpLocation, createProducerClient(), topic);
+        new Thread(rejectedRecords).start();
         this.producer = createProducerClient();
     }
 
@@ -65,7 +67,8 @@ public class ProducerService {
         executor.shutdown();
         executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         producer.close();
-        logger.info("Producer Service Shutdown successful");
+        logger.warn("Producer Service Shutdown successful");
+        rejectedRecords.shutdown();
     }
 
     private class ProducerTask implements Runnable {
@@ -90,23 +93,15 @@ public class ProducerService {
         }
 
         public BufferedReader getStreamReader() throws IOException {
-            String extension = Files.getFileExtension(filePath);
+            String extension = Files.getFileExtension(batchName);
             CompressionType compressionType = CompressionType.getCompressionType(extension);
             return new BufferedReader(new InputStreamReader(
                     compressionType.wrapInputStream(new ByteArrayInputStream(b))));
         }
 
-        void process(String key, String line) {
-            ProducerRecord<String, String> record = new ProducerRecord<>(subscribedTopic, key, line);
-            producer.send(record, new Callback() {
-                @Override
-                public void onCompletion(RecordMetadata recordMetadata, Exception e) {
-                    if (e != null) {
-                        logger.error(e.getMessage());
-                        rejectedRecords.retry(line, null, 0);
-                    }
-                }
-            });
+        void process(String key, String msg) {
+            ProducerRecord<String, String> record = new ProducerRecord<>(subscribedTopic, key, msg);
+            rejectedRecords.submit(msg, producer.send(record));
         }
 
         public void readlocalFile() {
@@ -116,11 +111,12 @@ public class ProducerService {
                 return;
             }
 
-            logger.info("Replaying {}", file.getName());
+            logger.info("Loading File {}", file.getName());
             try (BufferedReader reader = getFileReader()) {
                 String line;
                 String key = null; // PLEASE MAKE SURE YOU WANT THIS TO BE NULL
                 while ((line = reader.readLine()) != null) {
+//                    tps.incrementOpCount();
                     process(key, line);
                 }
             } catch (IOException e) {
@@ -135,13 +131,15 @@ public class ProducerService {
         }
 
         public void readBytes() {
-            logger.info("Replaying {}", batchName);
+            logger.info("Streaming {}", batchName);
             try (BufferedReader reader = getStreamReader()) {
                 String line;
-                String key = null; // PLEASE MAKE SURE YOU WANT THIS TO BE NULL
+                String key = null; // MAKE SURE YOU WANT THIS TO BE NULL
                 while ((line = reader.readLine()) != null) {
+//                    logger.info(line);
                     process(key, line);
                 }
+                logger.info("Streaming complete {}", batchName);
             } catch (IOException e) {
                 logger.error(e.getMessage());
             }
