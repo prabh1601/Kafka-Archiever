@@ -127,7 +127,6 @@ public class DownloadService {
         }
 
         public void downloadStream() {
-            logger.warn("Operating in In Memory Mode");
             GetObjectRequest request = GetObjectRequest.builder().bucket(bucket).key(key).build();
             ResponseBytes<GetObjectResponse> response = s3Client.getObject(request, ResponseTransformer.toBytes());
             File f = new File(localFileName);

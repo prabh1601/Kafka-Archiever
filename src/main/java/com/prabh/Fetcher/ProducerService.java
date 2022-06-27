@@ -139,7 +139,7 @@ public class ProducerService {
 //                    logger.info(line);
                     process(key, line);
                 }
-                logger.info("Streaming complete {}", batchName);
+//                logger.info("Streaming complete {}", batchName);
             } catch (IOException e) {
                 logger.error(e.getMessage());
             }

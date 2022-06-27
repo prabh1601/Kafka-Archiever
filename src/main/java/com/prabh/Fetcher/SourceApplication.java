@@ -51,7 +51,7 @@ public class SourceApplication {
         private String bootstrapId;
         private NewTopic produceTopic;
         private int producerThreadCount = 10;
-        private int downloadThreadCount = 5;
+        private int downloadThreadCount = 20;
         private boolean stream = false;
 
         public Builder() {

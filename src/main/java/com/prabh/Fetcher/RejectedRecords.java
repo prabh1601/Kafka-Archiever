@@ -50,7 +50,6 @@ public class RejectedRecords implements Runnable {
         while (!stopped.get() || !rejectedRecords.isEmpty()) {
             Pair<Future<RecordMetadata>, String> p = rejectedRecords.poll();
             if (p != null) {
-                System.out.println(p.second);
                 try {
                     p.first.get();
                 } catch (ExecutionException | InterruptedException e) {
