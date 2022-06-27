@@ -1,4 +1,6 @@
-package com.prabh.Archiver;
+package com.prabh.CodeExamples;
+
+import com.prabh.Archiver.SinkApplication;
 
 import java.util.List;
 
