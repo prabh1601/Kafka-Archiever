@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
 public class AdminController {
@@ -21,9 +22,9 @@ public class AdminController {
         this.client = Admin.create(prop);
     }
 
-    public List<String> getTopics() {
+    public Set<String> getTopics() {
         try {
-            return client.listTopics().names().get().stream().toList();
+            return client.listTopics().names().get();
         } catch (ExecutionException | InterruptedException e) {
             logger.error("Topic List Retrieval failed");
             return null;
@@ -36,7 +37,7 @@ public class AdminController {
     }
 
     public boolean create(NewTopic topic) {
-        if (exists(topic.name())) {
+        if (exists(List.of(topic.name()))) {
             logger.warn("Asked Topic-{} already exists, skipping creation", topic.name());
             return true;
         }
@@ -52,12 +53,12 @@ public class AdminController {
         }
     }
 
-    public boolean exists(String topic) {
-        try {
-            return client.listTopics().names().get().contains(topic);
-        } catch (ExecutionException | InterruptedException e) {
-            logger.error("Topic Check failed");
-            return false;
+    public boolean exists(List<String> topics) {
+        Set<String> existingTopics = getTopics();
+        boolean ok = true;
+        for (String topic : topics) {
+            ok &= existingTopics.contains(topic);
         }
+        return ok;
     }
 }

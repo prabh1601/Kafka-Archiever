@@ -17,8 +17,7 @@ public enum CompressionType {
 
     // Gzip
     GZIP("gzip", "gz") {
-        private static final int GZIP_BUFFER_SIZE_BYTES = 8 * 1024;
-        // 8 KB -> the default value that is used for buffered reader
+        private static final int GZIP_BUFFER_SIZE_BYTES = 8 * 1024;  // 8 KB
 
         @Override
         public OutputStream wrapOutputStream(OutputStream out) throws IOException {
