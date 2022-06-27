@@ -7,46 +7,55 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.util.Calendar;
+import java.util.List;
 
-public class PartitionBatchMemory {
-    private final Logger logger = LoggerFactory.getLogger(PartitionBatchMemory.class);
+public class PartitionBatch {
+    private final Logger logger = LoggerFactory.getLogger(PartitionBatch.class);
     private final CompressionType compressionType;
-    private final BufferedOutputStream out;
     private final ConsumerRecord<String, String> leaderRecord;
     private ConsumerRecord<String, String> latestRecord;
-    private final int maxBatchingSize = 6 * 1024 * 1024;
     private int currentBatchSize = 0;
-    private final ByteArrayOutputStream bStream = new ByteArrayOutputStream(maxBatchingSize);
+    String localDumpLocation = String.format("%s/Upload", System.getProperty("java.io.tmpdir"));
+    private final String filePath;
+    private final long maxBatchDurationInMillis = 5 * 60 * 1000; // 5 Min
+    private final long maxBatchSizeInBytes = 10 * 1024 * 1024; // 5 MB
 
-    public PartitionBatchMemory(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
+    public PartitionBatch(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
         this.leaderRecord = _leaderRecord;
         this.compressionType = _compressionType;
-        this.out = getOutputStream();
+        int partition = leaderRecord.partition();
+        long startingOffset = leaderRecord.offset();
+        this.filePath = localDumpLocation + "/" + partition + "_" + startingOffset;
     }
 
-    BufferedOutputStream getOutputStream() {
+    PrintWriter getWriter() {
         try {
-            return new BufferedOutputStream(compressionType.wrapOutputStream(bStream));
+            new File(filePath).mkdirs();
+            return new PrintWriter(
+                    new BufferedOutputStream(
+                            compressionType.wrapOutputStream(
+                                    new FileOutputStream(filePath, true))));
         } catch (IOException e) {
             logger.error(e.getMessage());
             return null;
         }
     }
 
-    public void addToBuffer(ConsumerRecord<String, String> record) {
-        latestRecord = record;
-        try {
-            String s = record.value() + "\n";
-            out.write(s.getBytes());
-            currentBatchSize += (record.serializedValueSize() + 1);
-        } catch (IOException e) {
-            logger.error(e.getMessage());
+    public void addToBuffer(List<ConsumerRecord<String, String>> records) {
+        try (PrintWriter writer = getWriter()) {
+            for (ConsumerRecord<String, String> record : records) {
+                writer.println(record.value());
+                currentBatchSize += (record.serializedValueSize() + 1);
+                latestRecord = record;
+            }
         }
     }
 
+    long remainingSpace() {
+        return maxBatchSizeInBytes - currentBatchSize;
+    }
+
     public boolean readyForCommit() {
-        long maxBatchDurationInMillis = 5 * 60 * 1000; // 5 Min
-        long maxBatchSizeInBytes = 5 * 1024 * 1024; // 5 MB
         if (currentBatchSize == 0) return false;
 
         // Check Chunk Duration
@@ -67,6 +76,7 @@ public class PartitionBatchMemory {
         return latestRecord.timestamp();
     }
 
+
     String getKey() {
         int partition = leaderRecord.partition();
         long startingOffset = leaderRecord.offset();
@@ -74,23 +84,16 @@ public class PartitionBatchMemory {
         Calendar c = Calendar.getInstance();
         c.setTimeInMillis(getFirstTimeStamp());
 
+
         String fileName = partition + "_" + startingOffset + "_" + endingOffset;
         if (!compressionType.extension.equals("")) {
             fileName += "." + compressionType.extension;
         }
-
         return "topics/" + leaderRecord.topic() + "/" + c.get(Calendar.YEAR) + "/" + (c.get(Calendar.MONTH) + 1) + "/"
                 + c.get(Calendar.DAY_OF_MONTH) + "/" + c.get(Calendar.HOUR_OF_DAY) + "/" + c.get(Calendar.MINUTE) + "/" + fileName;
     }
 
-    public byte[] commitBatch() {
-        try {
-            bStream.close();
-            out.close();
-            return bStream.toByteArray();
-        } catch (IOException e) {
-            logger.error(e.getMessage());
-            return null;
-        }
+    String getFilePath() {
+        return filePath;
     }
 }

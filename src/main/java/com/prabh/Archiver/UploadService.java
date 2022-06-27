@@ -1,9 +1,5 @@
 package com.prabh.Archiver;
 
-import com.amazonaws.event.ProgressEvent;
-import com.amazonaws.event.ProgressEventType;
-import com.amazonaws.services.s3.transfer.PersistableTransfer;
-import com.amazonaws.services.s3.transfer.internal.S3ProgressListener;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.prabh.Utils.Config;
 import com.prabh.Utils.LimitedQueue;
@@ -15,7 +11,6 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
-import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.File;
 import java.util.concurrent.*;
@@ -45,12 +40,8 @@ public class UploadService {
         this(_bucket, 5);
     }
 
-    public void submit(byte[] batch, String key) {
-        uploadWorker.submit(new UploadWorker(batch, key));
-    }
-
     public void submit(File file, String key) {
-
+        uploadWorker.submit(new UploadWorker(file, key));
     }
 
     public void shutdown() {
@@ -64,13 +55,7 @@ public class UploadService {
 
     public class UploadWorker implements Runnable {
         private final String key;
-        private byte[] batch;
-        private File file = null;
-
-        public UploadWorker(byte[] _batch, String _key) {
-            this.batch = _batch;
-            this.key = _key;
-        }
+        private final File file;
 
         public UploadWorker(File file, String _key) {
             this.file = file;
@@ -80,43 +65,16 @@ public class UploadService {
         public void run() {
             try {
                 PutObjectRequest request = PutObjectRequest.builder().bucket(bucket).key(key).build();
-                PutObjectResponse response = s3Client.putObject(request, RequestBody.fromBytes(batch));
+                PutObjectResponse response = s3Client.putObject(request, RequestBody.fromFile(file));
                 if (response != null) {
                     logger.info("Submitted {}", key);
+                }
+                if (!file.delete()) {
+                    logger.error("Failed Local Cache deletion of {}", file.getName());
                 }
             } catch (AwsServiceException | SdkClientException e) {
                 logger.error(e.getMessage());
             }
-        }
-    }
-
-    class UploadProgressListener implements S3ProgressListener {
-        File file;
-
-        UploadProgressListener(File _file) {
-            this.file = _file;
-        }
-
-        @Override
-        public void onPersistableTransfer(PersistableTransfer persistableTransfer) {
-
-        }
-
-        @Override
-        public void progressChanged(ProgressEvent progressEvent) {
-            if (progressEvent.getEventType() == ProgressEventType.TRANSFER_STARTED_EVENT) {
-                logger.info("Started to upload: " + file.getName());
-            }
-            if (progressEvent.getEventType() == ProgressEventType.TRANSFER_COMPLETED_EVENT) {
-                logger.info("Completed upload: " + file.getName());
-                if (file.delete()) {
-                    logger.error("Local Cache clearing of {} failed", file.getName());
-                }
-            }
-            if (progressEvent.getEventType() == ProgressEventType.TRANSFER_FAILED_EVENT) {
-                logger.info("Failed upload: " + file.getAbsolutePath());
-            }
-
         }
     }
 }

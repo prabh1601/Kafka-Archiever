@@ -8,6 +8,7 @@ import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -18,7 +19,7 @@ public class WriteService {
     private final ExecutorService taskExecutor;
     private final CompressionType compressionType;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    private final ConcurrentHashMap<TopicPartition, PartitionBatchInMemory> activeBatches = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TopicPartition, PartitionBatch> activeBatches = new ConcurrentHashMap<>();
     private final UploadService uploadService;
 
     public WriteService(int noOfConsumers, int taskPoolSize, CompressionType _compressionType, UploadService _uploadService) {
@@ -98,19 +99,18 @@ public class WriteService {
         return activeBatches.get(partition).readyForCommit();
     }
 
-    public void addToBuffer(TopicPartition partition, ConsumerRecord<String, String> record) {
-        activeBatches.get(partition).addToBuffer(record);
+    public void addToBuffer(TopicPartition partition, List<ConsumerRecord<String, String>> records) {
+        activeBatches.get(partition).addToBuffer(records);
     }
 
     public void initializeNewBatch(TopicPartition partition, ConsumerRecord<String, String> record) {
-        PartitionBatchInMemory batch = new PartitionBatchInMemory(record, compressionType);
+        PartitionBatch batch = new PartitionBatch(record, compressionType);
         activeBatches.put(partition, batch);
     }
 
     public void commitBatch(TopicPartition partition) {
-        PartitionBatchInMemory batch = activeBatches.get(partition);
-        byte[] b = batch.commitBatch();
-        uploadService.submit(b, batch.getKey());
+        PartitionBatch batch = activeBatches.get(partition);
+        uploadService.submit(new File(batch.getFilePath()), batch.getKey());
         activeBatches.remove(partition);
     }
 
@@ -137,18 +137,27 @@ public class WriteService {
             started = true; // Task is started by executor thread pool
             startStopLock.unlock();
 
-            for (ConsumerRecord<String, String> record : records) {
+            int n = records.size();
+            for (int i = 0; i < n; ) {
                 if (stopped) break;
                 if (readyForCommit(partition)) {
                     commitBatch(partition);
                 }
 
                 if (!activeBatches.containsKey(partition)) {
-                    initializeNewBatch(partition, record);
+                    initializeNewBatch(partition, records.get(i));
                 }
 
-                addToBuffer(partition, record);
-                currentOffset.set(record.offset() + 1);
+                List<ConsumerRecord<String, String>> records = new ArrayList<>(n - i);
+                long remainingSpace = activeBatches.get(partition).remainingSpace();
+                while (i < n && remainingSpace > 0) {
+                    ConsumerRecord<String, String> record = records.get(i);
+                    records.add(record);
+                    remainingSpace -= (record.serializedValueSize() + 1);
+                    i++;
+                    currentOffset.set(record.offset() + 1);
+                }
+
             }
 
             finished = true;
