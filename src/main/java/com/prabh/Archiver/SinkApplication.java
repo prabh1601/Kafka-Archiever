@@ -2,9 +2,17 @@ package com.prabh.Archiver;
 
 import com.prabh.Utils.AdminController;
 import com.prabh.Utils.CompressionType;
+import org.apache.kafka.clients.admin.Admin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.GetBucketAclRequest;
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.waiters.S3Waiter;
 
 import java.util.List;
 
@@ -13,11 +21,10 @@ public class SinkApplication {
     private final ConsumerService consumerClient;
     private final WriteService writerClient;
     private final UploadService uploadClient;
-    private final AdminController adminController;
+//    private final AdminController adminController;
 
     private SinkApplication(Builder builder) {
         // validate config parameters
-        this.adminController = new AdminController(builder.serverId);
         boolean ok = validateConfig(builder);
         if (!ok) {
             logger.error("Application Build Failed");
@@ -36,10 +43,6 @@ public class SinkApplication {
 
     private boolean validateConfig(Builder builder) {
         // Validate Topic
-        if (!adminController.exists(builder.subscribedTopics)) {
-            logger.error("Build Failed in attempt of subscribing non-existing topic");
-            return false;
-        }
 
         // Put Other Validation Checks
         return true;
@@ -53,12 +56,11 @@ public class SinkApplication {
         consumerClient.shutdown();
         writerClient.shutdown();
         uploadClient.shutdown();
-        adminController.shutdown();
     }
 
     public static class Builder {
         public String serverId;
-        public String groupName;
+        public String groupName = "S3 Archiver";
         public List<String> subscribedTopics;
         public int noOfConsumers = 3;
         public int noOfSimultaneousWrites = 5;
@@ -118,9 +120,43 @@ public class SinkApplication {
             return this;
         }
 
-        public SinkApplication build() {
-            return new SinkApplication(this);
+        public void validate() {
+            if (serverId == null) {
+                throw new IllegalArgumentException("Bootstrap Server Id cannot be null");
+            }
+            if (subscribedTopics == null) {
+                throw new IllegalArgumentException("Subscribed Topics cannot be null");
+            } else {
+                AdminController adminController = new AdminController(serverId);
+                if (!adminController.exists(subscribedTopics)) {
+                    throw new IllegalArgumentException("Attempt to subscribe non-existing topic");
+                }
+                adminController.shutdown();
+            }
+
+            if (s3Client == null) {
+                throw new IllegalArgumentException("S3Client cannot be null");
+            } else if (bucket == null) {
+                throw new IllegalArgumentException("Destination Bucket cannot be null");
+            } else {
+                GetBucketAclRequest request = GetBucketAclRequest.builder().bucket("myregiontestingbucket").build();
+                try {
+                    s3Client.getBucketAcl(request);
+                } catch (AwsServiceException ase) {
+                    if (ase.statusCode() == 404) {
+                        throw new IllegalArgumentException("Destination Bucket Doesnt Exist");
+                    } else if (ase.statusCode() == 301) {
+                        throw new IllegalArgumentException("Defined S3 Region doesnt match the bucket configurations");
+                    }
+                } catch (SdkClientException e) {
+                    throw new IllegalArgumentException(e.getMessage());
+                }
+            }
         }
 
+        public SinkApplication build() {
+            validate();
+            return new SinkApplication(this);
+        }
     }
 }
