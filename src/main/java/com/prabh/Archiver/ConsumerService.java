@@ -82,6 +82,9 @@ public class ConsumerService {
             consumerProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
             consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+//            consumerProperties.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 100 * 1024 * 1024);
+//            consumerProperties.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 20 * 1024 * 1024);
+//            consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, Integer.MAX_VALUE);
             return new KafkaConsumer<>(consumerProperties);
         }
 

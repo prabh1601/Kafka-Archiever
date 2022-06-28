@@ -4,6 +4,7 @@ import com.prabh.Utils.AdminController;
 import com.prabh.Utils.CompressionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.s3.S3Client;
 
 import java.util.List;
 
@@ -24,10 +25,10 @@ public class SinkApplication {
         }
 
 //         Creating Uploader Client
-        this.uploadClient = new UploadService(builder.bucket);
+        this.uploadClient = new UploadService(builder.s3Client, builder.bucket, builder.noOfUploads);
 
 //         Creating Writer Client
-        this.writerClient = new WriteService(builder.noOfConsumers, builder.noOfSimultaneousTask, builder.compressionType, uploadClient);
+        this.writerClient = new WriteService(builder.noOfConsumers, builder.noOfSimultaneousWrites, builder.compressionType, uploadClient);
 
 //         Creating Consumer Client
         this.consumerClient = new ConsumerService(writerClient, builder.noOfConsumers, builder.groupName, builder.serverId, builder.subscribedTopics);
@@ -59,8 +60,10 @@ public class SinkApplication {
         public String serverId;
         public String groupName;
         public List<String> subscribedTopics;
-        public int noOfConsumers = 5;
-        public int noOfSimultaneousTask = 5;
+        public int noOfConsumers = 3;
+        public int noOfSimultaneousWrites = 5;
+        public int noOfUploads = 5;
+        public S3Client s3Client;
         public String bucket;
         public CompressionType compressionType = CompressionType.NONE;
 
@@ -88,7 +91,7 @@ public class SinkApplication {
 
         // No of threads for ExecutorService
         public Builder writeTaskCount(int _noOfSimultaneousTask) {
-            this.noOfSimultaneousTask = _noOfSimultaneousTask;
+            this.noOfSimultaneousWrites = _noOfSimultaneousTask;
             return this;
         }
 
@@ -109,7 +112,8 @@ public class SinkApplication {
             return this;
         }
 
-        public Builder sinkBucket(String _bucket) {
+        public Builder s3(S3Client s3Client, String _bucket) {
+            this.s3Client = s3Client;
             this.bucket = _bucket;
             return this;
         }

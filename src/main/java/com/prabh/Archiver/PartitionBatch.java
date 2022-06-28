@@ -1,6 +1,7 @@
 package com.prabh.Archiver;
 
 import com.prabh.Utils.CompressionType;
+import com.prabh.Utils.TPSCalculator;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,10 +16,11 @@ public class PartitionBatch {
     private final ConsumerRecord<String, String> leaderRecord;
     private ConsumerRecord<String, String> latestRecord;
     private int currentBatchSize = 0;
-    String localDumpLocation = String.format("%s/Upload", System.getProperty("java.io.tmpdir"));
+    String localDumpLocation = String.format("%s/KafkaToS3", System.getProperty("java.io.tmpdir"));
+    //    String localDumpLocation = "/mnt/Drive1/Kafka-Dump/KafkaToS3";
     private final String filePath;
     private final long maxBatchDurationInMillis = 5 * 60 * 1000; // 5 Min
-    private final long maxBatchSizeInBytes = 10 * 1024 * 1024; // 5 MB
+    private final long maxBatchSizeInBytes = 10 * 1024 * 1024; // 10 MB
 
     public PartitionBatch(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
         this.leaderRecord = _leaderRecord;
@@ -29,8 +31,9 @@ public class PartitionBatch {
     }
 
     PrintWriter getWriter() {
+        System.out.println(filePath);
         try {
-            new File(filePath).mkdirs();
+            new File(localDumpLocation).mkdirs();
             return new PrintWriter(
                     new BufferedOutputStream(
                             compressionType.wrapOutputStream(

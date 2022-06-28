@@ -2,6 +2,7 @@ package com.prabh.Archiver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.prabh.Utils.CompressionType;
+import com.prabh.Utils.TPSCalculator;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -21,6 +22,12 @@ public class WriteService {
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
     private final ConcurrentHashMap<TopicPartition, PartitionBatch> activeBatches = new ConcurrentHashMap<>();
     private final UploadService uploadService;
+//    private final TPSCalculator tps =  new TPSCalculator().start(30L, TimeUnit.SECONDS, new TPSCalculator.AbstractTPSCallback() {
+//        @Override
+//        public void tpsStat(TPSCalculator.TPSStat stat) {
+//            logger.error("stats: " + stat.toString());
+//        }
+//    });
 
     public WriteService(int noOfConsumers, int taskPoolSize, CompressionType _compressionType, UploadService _uploadService) {
         this.uploadService = _uploadService;
@@ -104,8 +111,14 @@ public class WriteService {
     }
 
     public void initializeNewBatch(TopicPartition partition, ConsumerRecord<String, String> record) {
+        assert activeBatches.containsKey(partition);
         PartitionBatch batch = new PartitionBatch(record, compressionType);
         activeBatches.put(partition, batch);
+    }
+
+    public long getRemainingSpace(TopicPartition partition) {
+        assert activeBatches.containsKey(partition);
+        return activeBatches.get(partition).remainingSpace();
     }
 
     public void commitBatch(TopicPartition partition) {
@@ -148,18 +161,19 @@ public class WriteService {
                     initializeNewBatch(partition, records.get(i));
                 }
 
-                List<ConsumerRecord<String, String>> records = new ArrayList<>(n - i);
-                long remainingSpace = activeBatches.get(partition).remainingSpace();
+                List<ConsumerRecord<String, String>> batchedRecords = new ArrayList<>(n - i);
+                long remainingSpace = getRemainingSpace(partition);
                 while (i < n && remainingSpace > 0) {
                     ConsumerRecord<String, String> record = records.get(i);
-                    records.add(record);
+                    batchedRecords.add(record);
                     remainingSpace -= (record.serializedValueSize() + 1);
                     i++;
                     currentOffset.set(record.offset() + 1);
                 }
-
+                System.out.println("Batched");
+                addToBuffer(partition, batchedRecords);
+                System.out.println("Uploaded");
             }
-
             finished = true;
             completion.complete(currentOffset.get());
         }

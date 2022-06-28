@@ -5,12 +5,11 @@ import com.prabh.Utils.Config;
 import com.prabh.Utils.LimitedQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.awscore.exception.AwsServiceException;
-import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.File;
 import java.util.concurrent.*;
@@ -21,7 +20,7 @@ public class UploadService {
     private final ExecutorService uploadWorker;
     private final String bucket;
 
-    public UploadService(String _bucket, int uploadPoolSize) {
+    public UploadService(S3Client s3Client, String _bucket, int uploadPoolSize) {
         ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("UPLOAD-WORKER-%d").build();
         this.uploadWorker = new ThreadPoolExecutor(uploadPoolSize,
                 uploadPoolSize,
@@ -29,15 +28,9 @@ public class UploadService {
                 new LimitedQueue<>(2),
                 namedThreadFactory);
 
-        this.s3Client = S3Client.builder()
-                .region(Config.region)
-                .build();
+        this.s3Client = s3Client;
 
         this.bucket = _bucket;
-    }
-
-    public UploadService(String _bucket) {
-        this(_bucket, 5);
     }
 
     public void submit(File file, String key) {
@@ -72,8 +65,8 @@ public class UploadService {
                 if (!file.delete()) {
                     logger.error("Failed Local Cache deletion of {}", file.getName());
                 }
-            } catch (AwsServiceException | SdkClientException e) {
-                logger.error(e.getMessage());
+            } catch (S3Exception e) {
+                logger.error(e.awsErrorDetails().errorMessage());
             }
         }
     }
