@@ -26,30 +26,26 @@ public class AdminController {
         try {
             return client.listTopics().names().get();
         } catch (ExecutionException | InterruptedException e) {
-            logger.error("Topic List Retrieval failed");
-            return null;
+            throw new RuntimeException("Topic List Retrieval failed");
         }
     }
 
     public void shutdown() {
-        logger.warn("Admin Controller Shutting down");
         client.close();
     }
 
-    public boolean create(NewTopic topic) {
+    public void create(NewTopic topic) {
         if (exists(List.of(topic.name()))) {
-            logger.warn("Asked Topic-{} already exists, skipping creation", topic.name());
-            return true;
+            logger.warn("Topic [{}] already exists, Skipping Topic Creation", topic.name());
+            return;
         }
 
         logger.warn("Creating topic {}", topic);
         CreateTopicsResult result = client.createTopics(List.of(topic));
         try {
             result.all().get();
-            return true;
         } catch (InterruptedException | ExecutionException e) {
-            logger.error(e.getMessage(), e);
-            return false;
+            throw new RuntimeException(e.getMessage());
         }
     }
 
