@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -20,17 +21,21 @@ public class RejectedRecords implements Runnable {
     private batch b;
     private final KafkaProducer<String, String> producer;
     private final String topic;
-    private int rejectedBatchCount = 0;
     private final Logger logger = LoggerFactory.getLogger(RejectedRecords.class);
-    private final String localDumpLocation;
+    private final FilePaths filePaths;
     private final BlockingQueue<Pair<Future<RecordMetadata>, String>> rejectedRecords;
     private final AtomicBoolean stopped = new AtomicBoolean(false);
+    private ProgressListener progressListener;
 
-    public RejectedRecords(String _localDumpLocation, KafkaProducer<String, String> _producer, String topic) {
-        this.localDumpLocation = _localDumpLocation;
+    public RejectedRecords(FilePaths _filePaths, KafkaProducer<String, String> _producer, String topic) {
+        this.filePaths = _filePaths;
         this.producer = _producer;
         this.topic = topic;
         this.rejectedRecords = new ArrayBlockingQueue<>(1000);
+    }
+
+    public void setProgressListener(ProgressListener listener) {
+        this.progressListener = listener;
     }
 
     public void shutdown() {
@@ -47,19 +52,14 @@ public class RejectedRecords implements Runnable {
     }
 
     public void run() {
+        Thread.currentThread().setName("Rejection Handler");
         while (!stopped.get() || !rejectedRecords.isEmpty()) {
             Pair<Future<RecordMetadata>, String> p = rejectedRecords.poll();
             if (p != null) {
                 try {
                     p.first.get();
                 } catch (ExecutionException | InterruptedException e) {
-                    try {
-                        producer.send(new ProducerRecord<>(topic, null, p.second)).get();
-                    } catch (ExecutionException ex) {
-                        putToLocalCache(p.second);
-                    } catch (InterruptedException ex) {
-                        throw new RuntimeException(ex);
-                    }
+                    retry(p.second);
                 }
             }
         }
@@ -68,12 +68,24 @@ public class RejectedRecords implements Runnable {
         }
     }
 
+    public void retry(String msg) {
+        try {
+            producer.send(new ProducerRecord<>(topic, null, msg)).get();
+        } catch (ExecutionException e) {
+            putToLocalCache(msg);
+        } catch (InterruptedException e) {
+            logger.error(e.getMessage());
+            Thread.currentThread().interrupt();
+        }
+    }
+
     public void putToLocalCache(String record) {
         if (b == null || b.readyForCommit() == 2) {
-            rejectedBatchCount++;
-            b = new batch(rejectedBatchCount);
+            b = new batch();
+            System.out.println(b.fileName);
         }
-        logger.error("Rejected Record written to local cache : {}\n", record);
+        progressListener.markFailedRecord();
+        logger.error("Record Rejected after final tries and put to local cache");
         b.add(record);
     }
 
@@ -83,8 +95,8 @@ public class RejectedRecords implements Runnable {
         private final String fileName;
         private final Queue<String> buffer = new LinkedList<>();
 
-        batch(int rejectedBatchNo) {
-            this.fileName = localDumpLocation + "/Rejected/Batch" + rejectedBatchNo;
+        batch() {
+            this.fileName = filePaths.RejectedDirectory + "/" + UUID.randomUUID();
         }
 
         public void add(String record) {
@@ -105,10 +117,10 @@ public class RejectedRecords implements Runnable {
 
         public void flush() {
             new File(fileName).getParentFile().mkdirs();
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(fileName, true))) {
+            try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(fileName, true)))) {
                 while (!buffer.isEmpty()) {
                     String s = buffer.poll();
-                    writer.write(s + "\n");
+                    writer.println(s);
                 }
             } catch (IOException e) {
                 logger.error(e.getMessage());

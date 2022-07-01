@@ -16,7 +16,7 @@ public class FetchRequestRange {
 
     public static class StartTimestampBuilder {
         List<Integer> timestampParameters;
-        long epoch;
+        public long epoch;
 
         public StartTimestampBuilder(long epochInMillis) {
             this.epoch = epochInMillis;
@@ -33,6 +33,7 @@ public class FetchRequestRange {
             return new FetchRequestRange(this);
         }
 
+        // Maybe removed if required
         public StartTimestampBuilder(int year, int month, int date, int hour, int min) {
             timestampParameters = List.of(-1, year, month, date, hour, min);
         }
@@ -52,7 +53,7 @@ public class FetchRequestRange {
 
     public static class EndTimestampBuilder {
         List<Integer> timestampParameters;
-        long epoch;
+        public long epoch;
 
         public EndTimestampBuilder(long epochInMillis) {
             Calendar c = Calendar.getInstance();
@@ -69,6 +70,7 @@ public class FetchRequestRange {
             return new FetchRequestRange(this);
         }
 
+        // Maybe removed if required
         public EndTimestampBuilder(int year, int month, int date, int hour, int min) {
             timestampParameters = List.of(-1, year, month, date, hour, min);
         }

@@ -4,44 +4,45 @@ import com.prabh.Utils.AdminController;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
-
-import java.util.Properties;
+import software.amazon.awssdk.services.s3.model.GetBucketAclRequest;
 
 public class SourceApplication {
     private final Logger logger = LoggerFactory.getLogger(SourceApplication.class);
     private final DownloadService downloadingService;
     private final ProducerService producerService;
-    private final AdminController adminController;
-    private final NewTopic produceTopic;
 
     private SourceApplication(Builder builder) {
-        this.produceTopic = builder.produceTopic;
-        String localDumpLocation = String.format("%s/S3ToKafkaReplay/%d", System.getProperty("java.io.tmpdir"), System.currentTimeMillis());
-        this.adminController = new AdminController(builder.bootstrapId);
-        this.producerService = new ProducerService(builder.produceTopic.name(), builder.bootstrapId, localDumpLocation,
+        FilePaths filePaths = new FilePaths(78439053, 43950834); // Have to fix this somehow
+        this.producerService = new ProducerService(builder.produceTopic.name(), builder.bootstrapId, filePaths,
                 builder.producerThreadCount);
         this.downloadingService = new DownloadService(builder.s3Client, builder.bucket, builder.consumeTopic,
-                builder.startStamp, builder.endStamp, producerService, builder.stream, localDumpLocation,
+                builder.startStamp, builder.endStamp, producerService, builder.stream, filePaths,
                 builder.downloadThreadCount);
     }
 
+    // Overwrites the local cached progress if present
     public void start() {
-        // Check if
-        boolean ok = adminController.create(produceTopic);
-        if (!ok) {
-            logger.error("Application Start failed");
-            return;
-        }
-        downloadingService.run();
+        downloadingService.start(false);
+    }
+
+    // Uses the local cached progress
+    public void resume() {
+        downloadingService.start(true);
+    }
+
+    // Can try replaying rejected Records once again
+    public void replayRejectedCache() {
+        downloadingService.replayRejectedCache();
     }
 
     public void shutdown() {
         logger.warn("Source Application Shutdown Initiated");
-        adminController.shutdown();
+        downloadingService.shutdown(true);
     }
 
-    // check if cache for consumeTopic exists
     public static class Builder {
         private FetchRequestRange startStamp;
         private FetchRequestRange endStamp;
@@ -58,28 +59,40 @@ public class SourceApplication {
 
         }
 
-        public Builder bootstrapServer(String _bootstrapId) {
-            this.bootstrapId = _bootstrapId;
-            return this;
-        }
 
-        public Builder consumeTopic(String topic) {
+//        public Builder bucket(String _bucket) {
+//            this.bucket = _bucket;
+//            return this;
+//        }
+//
+//        public Builder s3Client(S3Client _s3Client) {
+//            this.s3Client = _s3Client;
+//            return this;
+//        }
+//        public Builder consumeTopic(String topic) {
+//            this.consumeTopic = topic;
+//            return this;
+//        }
+//        public Builder bootstrapServer(String _bootstrapId) {
+//            this.bootstrapId = _bootstrapId;
+//            return this;
+//        }
+//
+//        public Builder produceTopic(NewTopic topic) {
+//            this.produceTopic = topic;
+//            return this;
+//        }
+
+        public Builder s3Builder(S3Client s3Client, String bucket, String topic) {
+            this.s3Client = s3Client;
+            this.bucket = bucket;
             this.consumeTopic = topic;
             return this;
         }
 
-        public Builder produceTopic(NewTopic topic) {
+        public Builder kafkaBuilder(String BootstrapServerId, NewTopic topic) {
+            this.bootstrapId = BootstrapServerId;
             this.produceTopic = topic;
-            return this;
-        }
-
-        public Builder bucket(String _bucket) {
-            this.bucket = _bucket;
-            return this;
-        }
-
-        public Builder s3Client(S3Client _s3Client) {
-            this.s3Client = _s3Client;
             return this;
         }
 
@@ -119,10 +132,30 @@ public class SourceApplication {
                 throw new IllegalArgumentException("Parameter 'S3 Client' must not be null");
             } else if (bucket == null) {
                 throw new IllegalArgumentException("Parameter 'Bucket' must not be null");
-            } else if (produceTopic == null) {
-                throw new IllegalArgumentException("Parameter 'Produce Topic' must not be null");
             } else if (startStamp == null || endStamp == null)
                 throw new IllegalArgumentException("Missing or Invalid queried epoch range");
+            if (produceTopic == null) {
+                throw new IllegalArgumentException("Parameter 'Produce Topic' must not be null");
+            } else {
+                // Helps checking kafka connections before start
+                AdminController adminController = new AdminController(bootstrapId);
+                adminController.create(produceTopic);
+                adminController.shutdown();
+
+                // Check if bucket and aws client are ok
+                GetBucketAclRequest request = GetBucketAclRequest.builder().bucket(bucket).build();
+                try {
+                    s3Client.getBucketAcl(request);
+                } catch (AwsServiceException ase) {
+                    if (ase.statusCode() == 404) {
+                        throw new IllegalArgumentException("Destination Bucket doesn't exist");
+                    } else if (ase.statusCode() == 301) {
+                        throw new IllegalArgumentException("Defined S3 Region doesn't match the bucket configurations");
+                    }
+                } catch (SdkClientException e) {
+                    throw new IllegalArgumentException(e.getMessage());
+                }
+            }
         }
 
         public SourceApplication build() {
