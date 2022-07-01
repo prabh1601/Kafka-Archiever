@@ -1,7 +1,6 @@
 package com.prabh.Archiver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.prabh.Utils.Config;
 import com.prabh.Utils.LimitedQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

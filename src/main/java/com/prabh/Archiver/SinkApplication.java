@@ -139,7 +139,7 @@ public class SinkApplication {
             } else if (bucket == null) {
                 throw new IllegalArgumentException("Destination Bucket cannot be null");
             } else {
-                GetBucketAclRequest request = GetBucketAclRequest.builder().bucket("myregiontestingbucket").build();
+                GetBucketAclRequest request = GetBucketAclRequest.builder().bucket(bucket).build();
                 try {
                     s3Client.getBucketAcl(request);
                 } catch (AwsServiceException ase) {

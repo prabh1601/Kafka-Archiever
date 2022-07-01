@@ -2,7 +2,6 @@ package com.prabh.Archiver;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.prabh.Utils.CompressionType;
-import com.prabh.Utils.TPSCalculator;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -20,11 +19,11 @@ public class WriteService {
     private final ExecutorService taskExecutor;
     private final CompressionType compressionType;
     private final List<ConcurrentHashMap<TopicPartition, WritingTask>> activeTasks;
-    private final ConcurrentHashMap<TopicPartition, PartitionBatch> activeBatches = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<TopicPartition, TopicPartitionWriter> activeBatches = new ConcurrentHashMap<>();
     private final UploadService uploadService;
 //    private final TPSCalculator tps =  new TPSCalculator().start(30L, TimeUnit.SECONDS, new TPSCalculator.AbstractTPSCallback() {
 //        @Override
-//        public void tpsStat(TPSCalculator.TPSStat stat) {
+//        public void tpsStat(TPSCalculator.ProgressStat stat) {
 //            logger.error("stats: " + stat.toString());
 //        }
 //    });
@@ -112,7 +111,7 @@ public class WriteService {
 
     public void initializeNewBatch(TopicPartition partition, ConsumerRecord<String, String> record) {
         assert activeBatches.containsKey(partition);
-        PartitionBatch batch = new PartitionBatch(record, compressionType);
+        TopicPartitionWriter batch = new TopicPartitionWriter(record, compressionType);
         activeBatches.put(partition, batch);
     }
 
@@ -122,7 +121,7 @@ public class WriteService {
     }
 
     public void commitBatch(TopicPartition partition) {
-        PartitionBatch batch = activeBatches.get(partition);
+        TopicPartitionWriter batch = activeBatches.get(partition);
         uploadService.submit(new File(batch.getFilePath()), batch.getKey());
         activeBatches.remove(partition);
     }

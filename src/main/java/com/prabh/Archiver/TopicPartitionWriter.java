@@ -1,7 +1,6 @@
 package com.prabh.Archiver;
 
 import com.prabh.Utils.CompressionType;
-import com.prabh.Utils.TPSCalculator;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,19 +9,19 @@ import java.io.*;
 import java.util.Calendar;
 import java.util.List;
 
-public class PartitionBatch {
-    private final Logger logger = LoggerFactory.getLogger(PartitionBatch.class);
+public class TopicPartitionWriter {
+    private final Logger logger = LoggerFactory.getLogger(TopicPartitionWriter.class);
     private final CompressionType compressionType;
     private final ConsumerRecord<String, String> leaderRecord;
     private ConsumerRecord<String, String> latestRecord;
     private int currentBatchSize = 0;
     String localDumpLocation = String.format("%s/KafkaToS3", System.getProperty("java.io.tmpdir"));
-    //    String localDumpLocation = "/mnt/Drive1/Kafka-Dump/KafkaToS3";
+    private long startTime = System.currentTimeMillis();
     private final String filePath;
     private final long maxBatchDurationInMillis = 5 * 60 * 1000; // 5 Min
     private final long maxBatchSizeInBytes = 10 * 1024 * 1024; // 10 MB
 
-    public PartitionBatch(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
+    public TopicPartitionWriter(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
         this.leaderRecord = _leaderRecord;
         this.compressionType = _compressionType;
         int partition = leaderRecord.partition();
@@ -61,9 +60,10 @@ public class PartitionBatch {
     public boolean readyForCommit() {
         if (currentBatchSize == 0) return false;
 
-        // Check Chunk Duration
-        long durationInMillis = getLastTimeStamp() - getFirstTimeStamp();
-        if (durationInMillis > maxBatchDurationInMillis) return true;
+        // Check batch timegap  and batch open duration
+        long timeGapInMillis = getLastTimeStamp() - getFirstTimeStamp();
+        long durationInMillis = System.currentTimeMillis() - startTime;
+        if (Math.max(timeGapInMillis, durationInMillis) > maxBatchDurationInMillis) return true;
 
         // Check Chunk Size
         if (currentBatchSize > maxBatchSizeInBytes) return true;
