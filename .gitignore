@@ -1,5 +1,3 @@
 target/
-src/main/Properties/values.properties
-PracticeStuff/
 src/main/java/com/prabh/Utils/Config.java
-
+src/main/java/TestingTools/
