@@ -20,7 +20,9 @@ The use case of this application are twofold
    - Resume capabilites for a task
    - Rejection Handler for rejected kafka records
 
-> Try reading [this blog]() to get a deep insights on how this application works
+## Getting Started
+
+Try reading [this blog]() to get a deep insights on how this application works
 
 ## Usage
 
