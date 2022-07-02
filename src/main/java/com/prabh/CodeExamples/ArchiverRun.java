@@ -2,10 +2,11 @@ package com.prabh.CodeExamples;
 
 import com.prabh.Archiver.SinkApplication;
 import com.prabh.Utils.CompressionType;
-import com.prabh.Utils.Config;
+import TestingTools.Config;
 import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
 import software.amazon.awssdk.core.retry.RetryPolicy;
 import software.amazon.awssdk.core.retry.backoff.FullJitterBackoffStrategy;
+import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
 import java.time.Duration;
@@ -29,20 +30,18 @@ public class ArchiverRun {
 
         ClientOverrideConfiguration conf = ClientOverrideConfiguration.builder().retryPolicy(policy).build();
 
-        S3Client s3Client = S3Client.builder().region(Config.region)
+        // aws client
+        S3Client s3Client = S3Client.builder().region(Region.AP_SOUTH_1)
                 .overrideConfiguration(conf)
                 .build();
 
         SinkApplication app = new SinkApplication.Builder()
                 .bootstrapServer("localhost:9092")
                 .subscribedTopics(List.of("twitter_tweets"))
-                .consumerGroup("cg")
                 .s3(s3Client, "prabhtest")
                 .compressionType(CompressionType.GZIP)
                 .build();
 
-        // aws client
-        // defaults values for consumer count unless
         app.start();
 
         // shutdown hook
