@@ -305,7 +305,7 @@ class DownloadService {
         long total = query(0, currentState, true, true);
         logger.info("All valid prefixes queried");
 
-        progressListener = new ProgressListener(filePaths, alreadyDone, total);
+        progressListener = new ProgressListener(filePaths);
         producerService.setProgressListener(progressListener);
         progressListener.start(5, TimeUnit.SECONDS);
         logger.info("Initiating Downloads");

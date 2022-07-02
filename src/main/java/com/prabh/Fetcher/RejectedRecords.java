@@ -84,7 +84,6 @@ public class RejectedRecords implements Runnable {
             b = new batch();
             System.out.println(b.fileName);
         }
-        progressListener.markFailedRecord();
         logger.error("Record Rejected after final tries and put to local cache");
         b.add(record);
     }

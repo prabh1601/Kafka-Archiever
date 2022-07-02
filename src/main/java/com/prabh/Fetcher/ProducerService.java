@@ -66,6 +66,7 @@ public class ProducerService {
         executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         producer.close();
         logger.warn("Producer Service Shutdown successful");
+        rejectedRecords.shutdown();
         progressListener.markProducedObject(FilePaths.POISON_PILL);
     }
 
