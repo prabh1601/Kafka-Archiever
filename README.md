@@ -29,7 +29,7 @@ The AWS user account accessing the S3 bucket must have the following permissions
 
 - ListAllMyBuckets
 - ListBucket
-- GetBucketLocation
+- GetBucketLocationMore
 - PutObject
 - GetObject
 
@@ -109,7 +109,7 @@ Check below for mandatory and optional parameters inroder to instantiate an obje
 |:---------------:|:-------------------------------------------------------:|:-------------------------:|------------------------------------------------------|
 | bootstrapServer |                   Bootstrap Server Id                   |          String           | BootStrap Server Id of the Kafka cluster             |
 | subscribeTopics | subscribe Topic<br/> (or)<br/>List of Subscribed Topics | String<br/> (or)<br/>List | Topics to be archived                                |
-|    s3Builder    |                  s3Client <br/> bucket                  |    s3Client<br/>String    | Amazon S3 Client <br/> Bucket to store archived data |
+|    s3Builder    |                  s3Client <br/> bucket                  |    [S3Client](https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html)<br/>String    | Amazon S3 Client <br/> Bucket to store archived data |
 
 </details>
 <details>
@@ -119,7 +119,7 @@ Check below for mandatory and optional parameters inroder to instantiate an obje
 
 | Builder Method  |    Input Parameters    | Parameter Type  |    Default Values    | Purpose                                                       |
 |-----------------|:----------------------:|:---------------:|:--------------------:|---------------------------------------------------------------|
-| compressionType |    CompressionType     | CompressionType | CompressionType.NONE | Use `Gzip` or `Snappy` for storing data in compressed format  |
+| compressionType |    CompressionType     | [CompressionType](https://github.com/prabh1601/Kafka-Archiver/blob/LocalStorageBatching/src/main/java/com/prabh/Utils/CompressionType.java) | CompressionType.NONE | Use `Gzip` or `Snappy` for storing data in compressed format  |
 | consumerCount   |     noOfConsumers      |       int       |          3           | No of concurrent consumer clients to be used for consumptions |
 | writeTaskCount  | noOfSimultaneousWrites |       int       |          5           | Max no of concurrent Files to be written                      |
 | uploadCount     | noOfSimulaneousUploads |       int       |          5           | Max no of concurrent Files to be uploaded                     |
@@ -176,8 +176,8 @@ Check below sections for mandatory and optional parameters inorder to instantiat
 
 |  Builder Method  |                    Input Parameters                     |         Parameter Type         | Purpose                                                                                                                               |
 |:----------------:|:-------------------------------------------------------:|:------------------------------:|---------------------------------------------------------------------------------------------------------------------------------------|
-|    s3Builder     |  S3Client <br/> Bucket Name <br/> Kafka Retrieve Topic  | S3Client<br/>String<br/>String | Amazon S3 Client <br/> Bucket to be used for retrieval<br/> Kafka Topic to be retrieved                                               |
-|   kafkaBuilder   |       Bootstrap Server <br/> Kafka Produce Topic        |      String<br/> NewTopic      | Bootstrap Id of the Kafka cluster<br/> Kafka Topic to to be produced <br/>`If topic is not present it creates a new of provided name` |
+|    s3Builder     |  S3Client <br/> Bucket Name <br/> Kafka Retrieve Topic  | [S3Client](https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html)<br/>String<br/>String | Amazon S3 Client <br/> Bucket to be used for retrieval<br/> Kafka Topic to be retrieved                                               |
+|   kafkaBuilder   |       Bootstrap Server <br/> Kafka Produce Topic        |      String<br/> [NewTopic](https://kafka.apache.org/24/javadoc/index.html?org/apache/kafka/clients/admin/NewTopic.html)     | Bootstrap Id of the Kafka cluster<br/> Kafka Topic to to be produced <br/>`If topic is not present it creates a new of provided name` |
 |      range       |               start epoch <br/> end epoch               |  long (or) FetchRequestRange   | Start of the range to be retrieved<br/>End of the range to be retrieved                                                               |
 
 </details>
