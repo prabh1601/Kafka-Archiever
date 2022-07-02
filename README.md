@@ -31,7 +31,7 @@ The AWS user account accessing the S3 bucket must have the following permissions
 
 - ListAllMyBuckets
 - ListBucket
-- GetBucketLocationMore
+- GetBucketLocation
 - PutObject
 - GetObject
 
