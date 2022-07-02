@@ -22,7 +22,7 @@ The use case of this application are twofold
 
 ## Getting Started
 
-Try reading [this blog]() to get a deep insights on how this application works
+You can read [this blog]() to get a deep insights on how this application works
 
 ## Usage
 
