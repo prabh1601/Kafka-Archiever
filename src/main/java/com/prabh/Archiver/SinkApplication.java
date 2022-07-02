@@ -2,17 +2,12 @@ package com.prabh.Archiver;
 
 import com.prabh.Utils.AdminController;
 import com.prabh.Utils.CompressionType;
-import org.apache.kafka.clients.admin.Admin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
 import software.amazon.awssdk.services.s3.model.GetBucketAclRequest;
-import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
-import software.amazon.awssdk.services.s3.model.S3Exception;
-import software.amazon.awssdk.services.s3.waiters.S3Waiter;
 
 import java.util.List;
 
@@ -25,11 +20,6 @@ public class SinkApplication {
 
     private SinkApplication(Builder builder) {
         // validate config parameters
-        boolean ok = validateConfig(builder);
-        if (!ok) {
-            logger.error("Application Build Failed");
-            throw new RuntimeException();
-        }
 
 //         Creating Uploader Client
         this.uploadClient = new UploadService(builder.s3Client, builder.bucket, builder.noOfUploads);
@@ -41,12 +31,6 @@ public class SinkApplication {
         this.consumerClient = new ConsumerService(writerClient, builder.noOfConsumers, builder.groupName, builder.serverId, builder.subscribedTopics);
     }
 
-    private boolean validateConfig(Builder builder) {
-        // Validate Topic
-
-        // Put Other Validation Checks
-        return true;
-    }
 
     public void start() {
         consumerClient.start();
@@ -97,6 +81,11 @@ public class SinkApplication {
             return this;
         }
 
+        public Builder uploadCount(int _noOfSimultaneousUploads) {
+            this.noOfUploads = _noOfSimultaneousUploads;
+            return this;
+        }
+
         // Make sure this topic Exists
         public Builder subscribedTopic(String _topic) {
             this.subscribedTopics = List.of(_topic);
@@ -114,7 +103,7 @@ public class SinkApplication {
             return this;
         }
 
-        public Builder s3(S3Client s3Client, String _bucket) {
+        public Builder s3Builder(S3Client s3Client, String _bucket) {
             this.s3Client = s3Client;
             this.bucket = _bucket;
             return this;
