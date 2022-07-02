@@ -33,9 +33,9 @@ The AWS user account accessing the S3 bucket must have the following permissions
 - PutObject
 - GetObject
 
-It is required to get user make his own object for S3Client client for security and customization purposes
+It is required to user make his own object for S3Client client for security and customization purposes
 
-Please Refer [here](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials.html) to get more
+Refer [here](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials.html) to get more
   insights on how to work with AWS credentials
   and [here](https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html) for AWS
   S3 Client javadocs
@@ -95,7 +95,7 @@ S3Client s3=S3Client.builder()
 ### S3 Sink Archiver
 
 One can use `SinkApplication` API to instantiate the archiver object, which can be instantiated using the
-static `SinkApplication` method.
+static `SinkApplication.Builder()` builder.
 
 Check below for mandatory and optional parameters inroder to instantiate an object
 <details>
@@ -165,7 +165,7 @@ SinkApplication app=new SinkApplication.Builder()
 ### S3 Source Replayer</summary>
 
 One can use `SourceApplication` API to instantiate the retrieval object,
-which can be instantiated using the static `SourceApplication.Builder()` method.
+which can be instantiated using the static `SourceApplication.Builder()` builder.
 
 Check below sections for mandatory and optional parameters inorder to instantiate an object
 <details>
