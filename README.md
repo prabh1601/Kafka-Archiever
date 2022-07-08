@@ -25,7 +25,7 @@ The use case of this application are twofold
 
 ## Getting Started
 
-You can read [this blog]() to get a deep insights on how this application works
+You can read [this blog](https://medium.com/@prabh1601/6a510f0cc788) to get a deep insights on how this application works
 
 ## Usage
 
@@ -270,7 +270,3 @@ SourceApplication app=new SourceApplication.Builder()
 > <b>[Click here](https://github.com/prabh1601/Kafka-Archiver/blob/LocalStorageBatching/src/main/java/com/prabh/CodeExamples/FetcherRun.java)
 > for complete code example</b>
 </details>
-
-## Contribution
-
-## License
