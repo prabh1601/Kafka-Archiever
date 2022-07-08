@@ -143,7 +143,7 @@ Check below for mandatory and optional parameters inroder to instantiate an obje
 * With Mandatory Fields
 
 ```java
-SinkApplication app=new SinkApplication.Builder()
+SinkClient app=new SinkClient.Builder()
         .bootstrapServer("BOOTSTRAP-SERVER-ID")
         .subscribedTopics(List.of("testTopic"))
         .s3Builder(s3Client,"BUCKET-NAME")
@@ -155,7 +155,7 @@ SinkApplication app=new SinkApplication.Builder()
 > One can use a subset of these fields as per requirements by just adding the builder method to the object build
 
 ```java
-SinkApplication app=new SinkApplication.Builder()
+SinkClient app=new SinkClie.Builder()
         .bootstrapServer("BOOTSTRAP-SERVER-ID")
         .subscribedTopics(List.of("testTopic"))
         .s3Builder(s3Client,"BUCKET-NAME")
@@ -231,7 +231,7 @@ long end=1656758897543;
 * With Mandatory Fields
 
 ```java
-SourceApplication app=new SourceApplication.Builder()
+SourceClient app=new SourceClient.Builder()
         .s3Builder(s3Client,"BUCKET","CONSUME-TOPIC")
         .kafkaBuilder("BOOTSTRAP-ID",new NewTopic("PRODUCE-TOPIC",<partitions>,(short)1))
         .range(start,end)
