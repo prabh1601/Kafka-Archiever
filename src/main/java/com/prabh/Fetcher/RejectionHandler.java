@@ -1,14 +1,17 @@
 package com.prabh.Fetcher;
 
 import com.prabh.Utils.Pair;
+import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.errors.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -17,17 +20,23 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class RejectedRecords implements Runnable {
-    private batch b;
+public class RejectionHandler implements Runnable {
+    private final List<String> permanentExceptions = List.of(InvalidTopicException.class.getName(),
+            OffsetMetadataTooLarge.class.getName(),
+            RecordTooLargeException.class.getName(),
+            RecordBatchTooLargeException.class.getName(),
+            UnknownServerException.class.getName());
+    private batch permanentErr;
+    private batch transientErr;
     private final KafkaProducer<String, String> producer;
     private final String topic;
-    private final Logger logger = LoggerFactory.getLogger(RejectedRecords.class);
+    private final Logger logger = LoggerFactory.getLogger(RejectionHandler.class);
     private final FilePaths filePaths;
     private final BlockingQueue<Pair<Future<RecordMetadata>, String>> rejectedRecords;
     private final AtomicBoolean stopped = new AtomicBoolean(false);
     private ProgressListener progressListener;
 
-    public RejectedRecords(FilePaths _filePaths, KafkaProducer<String, String> _producer, String topic) {
+    public RejectionHandler(FilePaths _filePaths, KafkaProducer<String, String> _producer, String topic) {
         this.filePaths = _filePaths;
         this.producer = _producer;
         this.topic = topic;
@@ -63,30 +72,57 @@ public class RejectedRecords implements Runnable {
                 }
             }
         }
-        if (b != null) {
-            b.flush();
+        if (permanentErr != null) {
+            permanentErr.flush();
         }
+
+        if (transientErr != null) {
+            transientErr.flush();
+        }
+    }
+
+    public boolean isPermanentErr(Exception e) {
+        return permanentExceptions.contains(e.getClass().getName());
     }
 
     public void retry(String msg) {
-        try {
-            producer.send(new ProducerRecord<>(topic, null, msg)).get();
-        } catch (ExecutionException e) {
-            putToLocalCache(msg);
-        } catch (InterruptedException e) {
-            logger.error(e.getMessage());
-            Thread.currentThread().interrupt();
+        producer.send(new ProducerRecord<>(topic, null, msg), new Callback() {
+            @Override
+            public void onCompletion(RecordMetadata recordMetadata, Exception e) {
+                if (e != null) {
+                    putToLocalCache(msg, isPermanentErr(e));
+                }
+            }
+        });
+    }
+
+    public void putToLocalCache(String record, boolean permanent) {
+        if (progressListener != null) {
+            progressListener.markRejectedRecord();
+        }
+        if (permanent) {
+            markPermanentRejection(record);
+        } else {
+            markTemporaryRejection(record);
         }
     }
 
-    public void putToLocalCache(String record) {
-        if (b == null || b.readyForCommit() == 2) {
-            b = new batch();
-            System.out.println(b.fileName);
+    public void markPermanentRejection(String record) {
+        if (permanentErr == null || permanentErr.readyForCommit() == 2) {
+            permanentErr = new batch(0);
         }
         logger.error("Record Rejected after final tries and put to local cache");
-        b.add(record);
+        permanentErr.add(record);
     }
+
+    public void markTemporaryRejection(String record) {
+        if (transientErr == null || transientErr.readyForCommit() == 2) {
+            transientErr = new batch(0);
+        }
+        logger.error("Record Rejected after final tries and put to local cache");
+        transientErr.add(record);
+    }
+
 
     private class batch {
         private final long startTime = System.currentTimeMillis();
@@ -94,8 +130,9 @@ public class RejectedRecords implements Runnable {
         private final String fileName;
         private final Queue<String> buffer = new LinkedList<>();
 
-        batch() {
-            this.fileName = filePaths.RejectedDirectory + "/" + UUID.randomUUID();
+        batch(long t) {
+            String dir = (t == 1) ? filePaths.RejectedDirectoryTransient : filePaths.RejectedDirectoryPermanent;
+            this.fileName = dir + "/" + UUID.randomUUID();
         }
 
         public void add(String record) {
@@ -119,6 +156,7 @@ public class RejectedRecords implements Runnable {
             try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(fileName, true)))) {
                 while (!buffer.isEmpty()) {
                     String s = buffer.poll();
+                    System.out.println(s);
                     writer.println(s);
                 }
             } catch (IOException e) {

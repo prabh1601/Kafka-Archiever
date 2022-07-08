@@ -1,6 +1,7 @@
 package com.prabh.Fetcher;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.prabh.Utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -13,10 +14,7 @@ import software.amazon.awssdk.services.s3.model.*;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -51,12 +49,13 @@ class DownloadService {
         this.filePaths = _filePaths;
     }
 
-    public void shutdown(boolean forced) {
-        if (forced) {
-            stopped.set(true);
-        }
-        workers.shutdown();
+    public void forceShutdown() {
+        stopped.set(true);
+    }
+
+    public void shutdown() {
         try {
+            workers.shutdown();
             workers.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
             s3Client.close();
             logger.info("Downloads Completed");
@@ -69,7 +68,7 @@ class DownloadService {
     }
 
     public void replayRejectedCache() {
-        File rejectedCache = new File(filePaths.RejectedDirectory);
+        File rejectedCache = new File(filePaths.RejectedDirectoryTransient);
         if (rejectedCache.exists()) {
             for (File file : Objects.requireNonNull(rejectedCache.listFiles())) {
                 producerService.submit(null, file.getAbsolutePath());
@@ -77,7 +76,7 @@ class DownloadService {
         } else {
             logger.error("No Cached Data found for Rejected Records");
         }
-        shutdown(false);
+        shutdown();
     }
 
     String getValidPrefix(int depth, List<Integer> state) {
@@ -89,9 +88,11 @@ class DownloadService {
         return keyPrefixBuilder.toString();
     }
 
+    boolean filecreated = false;
+
     long fetchObjectListWithPrefix(String bucket, String keyPrefix) {
         long totalObjects = 0;
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePaths.NetObjectListFile, true))) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePaths.NetObjectListFile, filecreated))) {
             ListObjectsV2Request listObjects = ListObjectsV2Request.builder().bucket(bucket).prefix(keyPrefix).build();
 
             boolean done = false;
@@ -115,6 +116,7 @@ class DownloadService {
             logger.error(e.getMessage());
             System.exit(1);
         }
+        filecreated = true;
         return totalObjects;
     }
 
@@ -149,14 +151,13 @@ class DownloadService {
                     logger.error("Failed Download : {}", new File(localFileName).getName());
                     return;
                 }
-                progressListener.markDownloadedObject(key);
                 producerService.submit(key, localFileName);
+                progressListener.markDownloadedObject(key);
             } catch (AwsServiceException e) {
                 logger.error("Download for object {} failed\n{}", key, e.awsErrorDetails().errorMessage());
             } catch (SdkClientException e) {
                 logger.error(e.getMessage());
             }
-
         }
 
         void downloadStream() {
@@ -168,8 +169,8 @@ class DownloadService {
                     logger.error("Failed Download : {}", f.getName());
                     return;
                 }
-                progressListener.markDownloadedObject(key);
                 producerService.submit(key, f.getName(), response.asByteArray());
+                progressListener.markDownloadedObject(key);
             } catch (AwsServiceException e) {
                 logger.error("Download for object {} failed\n{}", key, e.awsErrorDetails().errorMessage());
             } catch (SdkClientException e) {
@@ -182,6 +183,7 @@ class DownloadService {
             if (stopped.get()) {
                 return;
             }
+            logger.info("Downloading {}", key);
             if (streamDownload) {
                 downloadStream();
             } else {
@@ -244,22 +246,33 @@ class DownloadService {
         }
     }
 
-    public long loadProgressCheckpoint() {
+    public Pair<Integer, Integer> loadProgressCheckpoint() {
         try {
-            List<String> alreadyDownloadedObjects = Files.readAllLines(Paths.get(filePaths.DownloadedObjectListFile));
-            List<String> alreadyProducedObjects = Files.readAllLines(Paths.get(filePaths.ProducedObjectListFile));
-            for (String objectKey : alreadyDownloadedObjects) {
-                previousProgressCheckpoint.put(objectKey, 1);
+            int alreadyProduced = 0;
+            int alreadyDownloaded = 0;
+            if (new File(filePaths.DownloadedObjectListFile).exists()) {
+                List<String> alreadyDownloadedObjects = Files.readAllLines(Paths.get(filePaths.DownloadedObjectListFile));
+                HashSet<String> remDup = new HashSet<>(alreadyDownloadedObjects);
+                for (String objectKey : alreadyDownloadedObjects) {
+                    previousProgressCheckpoint.put(objectKey, 1);
+                }
+                alreadyDownloaded = remDup.size();
             }
 
-            for (String objectKey : alreadyProducedObjects) {
-                previousProgressCheckpoint.put(objectKey, 2);
+            if (new File(filePaths.ProducedObjectListFile).exists()) {
+                List<String> alreadyProducedObjects = Files.readAllLines(Paths.get(filePaths.ProducedObjectListFile));
+                for (String objectKey : alreadyProducedObjects) {
+                    previousProgressCheckpoint.put(objectKey, 2);
+                }
+                alreadyProduced = alreadyProducedObjects.size();
             }
 
-            return alreadyProducedObjects.size();
+            logger.warn("Loaded progress with {} already Produced Files and {} already Downloaded Files",
+                    alreadyProduced, alreadyDownloaded);
+            return new Pair<>(alreadyDownloaded, alreadyProduced);
         } catch (IOException e) {
             logger.error(e.getMessage());
-            return 0;
+            return new Pair<>(0, 0);
         }
     }
 
@@ -276,9 +289,9 @@ class DownloadService {
     void start(boolean usePreviousProgress) {
         Thread.currentThread().setName("DOWNLOAD-LEADER");
 
-        long alreadyDone = 0;
+        Pair<Integer, Integer> previousCheckpoint = new Pair<>(0, 0);
         if (usePreviousProgress) {
-            alreadyDone = loadProgressCheckpoint();
+            previousCheckpoint = loadProgressCheckpoint();
         } else {
             deleteLocalCache(new File(filePaths.localCacheDirectory));
         }
@@ -303,13 +316,18 @@ class DownloadService {
 
         logger.info("Generating Valid prefixes");
         long total = query(0, currentState, true, true);
-        logger.info("All valid prefixes queried");
+        logger.warn("All valid prefixes queried. Retrieved {} object keys", total);
+        if (total == 0) {
+            logger.error("No objects found within given range");
+            shutdown();
+            return;
+        }
 
-        progressListener = new ProgressListener(filePaths);
+        progressListener = new ProgressListener(filePaths, total, previousCheckpoint.first, previousCheckpoint.second);
         producerService.setProgressListener(progressListener);
-        progressListener.start(5, TimeUnit.SECONDS);
+        progressListener.start(1000, TimeUnit.MILLISECONDS);
         logger.info("Initiating Downloads");
         initiateDownloads();
-        shutdown(false);
+        shutdown();
     }
 }

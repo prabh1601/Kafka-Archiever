@@ -20,10 +20,12 @@ public class ProducerService {
     private final KafkaProducer<String, String> producer;
     private final String bootstrapId;
     private final ExecutorService executor;
-    private final RejectedRecords rejectedRecords;
+    private final RejectionHandler rejectedRecords;
     private ProgressListener progressListener;
+    private final CountDownLatch completion;
 
-    ProducerService(String topic, String _bootstrapId, FilePaths filePaths, int producerPoolSize) {
+    ProducerService(String topic, String _bootstrapId, FilePaths filePaths,CountDownLatch completion, int producerPoolSize) {
+        this.completion = completion;
         this.subscribedTopic = topic;
         this.bootstrapId = _bootstrapId;
         ThreadFactory namedThreadFactory = new ThreadFactoryBuilder().setNameFormat("KAFKA-PRODUCER-WORKER-%d").build();
@@ -33,14 +35,15 @@ public class ProducerService {
                 new LimitedQueue<>(10),
                 namedThreadFactory);
 
-        this.rejectedRecords = new RejectedRecords(filePaths, createProducerClient(), topic);
+        this.rejectedRecords = new RejectionHandler(filePaths, createProducerClient(), topic);
         new Thread(rejectedRecords).start();
         this.producer = createProducerClient();
+        sendInitialSingal();
     }
 
     void setProgressListener(ProgressListener listener) {
         this.progressListener = listener;
-        rejectedRecords.setProgressListener(listener);
+        rejectedRecords.setProgressListener(progressListener);
     }
 
     public KafkaProducer<String, String> createProducerClient() {
@@ -48,7 +51,18 @@ public class ProducerService {
         prop.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapId);
         prop.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         prop.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+//        prop.setProperty(ProducerConfig.MAX_REQUEST_SIZE_CONFIG, "100");
         return new KafkaProducer<>(prop);
+    }
+
+    public void sendInitialSingal() {
+        logger.info("Sending Initial Signal");
+        try {
+            producer.send(new ProducerRecord<>(subscribedTopic, null, "InitialSignal")).get();
+        } catch (InterruptedException | ExecutionException e) {
+            logger.error("Kafka Initial Signal Failed - " + e.getLocalizedMessage());
+            throw new RuntimeException(e);
+        }
     }
 
     public void submit(String objectKey, String filePath) {
@@ -65,9 +79,10 @@ public class ProducerService {
         executor.shutdown();
         executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
         producer.close();
-        logger.warn("Producer Service Shutdown successful");
         rejectedRecords.shutdown();
-        progressListener.markProducedObject(FilePaths.POISON_PILL);
+        progressListener.stop();
+        completion.countDown();
+        logger.warn("Producer Service Shutdown successful");
     }
 
     private class ProducerTask implements Runnable {
@@ -119,6 +134,7 @@ public class ProducerService {
                 String key = null; // PLEASE MAKE SURE YOU WANT THIS TO BE NULL
                 while ((line = reader.readLine()) != null) {
                     process(key, line);
+                    progressListener.markProducedRecord();
                 }
             } catch (IOException e) {
                 logger.error(e.getMessage(), e);
@@ -137,9 +153,9 @@ public class ProducerService {
                 String key = null; // MAKE SURE YOU WANT THIS TO BE NULL
                 while ((line = reader.readLine()) != null) {
                     process(key, line);
+                    progressListener.markProducedRecord();
                 }
                 progressListener.markProducedObject(objectKey);
-//                logger.info("Streaming complete {}", batchName);
             } catch (IOException e) {
                 logger.error(e.getMessage());
             }

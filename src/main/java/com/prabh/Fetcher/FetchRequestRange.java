@@ -5,18 +5,21 @@ import java.util.List;
 
 public class FetchRequestRange {
     final List<Integer> currentValue;
+    Long epoch;
 
     private FetchRequestRange(StartTimestampBuilder builder) {
         this.currentValue = builder.timestampParameters;
+        this.epoch = builder.epoch;
     }
 
     private FetchRequestRange(EndTimestampBuilder builder) {
         this.currentValue = builder.timestampParameters;
+        this.epoch = builder.epoch;
     }
 
     public static class StartTimestampBuilder {
         List<Integer> timestampParameters;
-        public long epoch;
+        public long epoch = -1L;
 
         public StartTimestampBuilder(long epochInMillis) {
             this.epoch = epochInMillis;
@@ -49,11 +52,13 @@ public class FetchRequestRange {
         public StartTimestampBuilder(int year, int month) {
             this(year, month, 0);
         }
+
+
     }
 
     public static class EndTimestampBuilder {
         List<Integer> timestampParameters;
-        public long epoch;
+        public long epoch = -1L;
 
         public EndTimestampBuilder(long epochInMillis) {
             Calendar c = Calendar.getInstance();
@@ -86,5 +91,15 @@ public class FetchRequestRange {
         public EndTimestampBuilder(int year, int month) {
             this(year, month, 31);
         }
+    }
+
+    public String getStamp() {
+        if (epoch != -1) return Long.toString(epoch);
+        StringBuilder ret = new StringBuilder("");
+        for (int i = 1; i <= 5; i++) {
+            ret.append(currentValue.get(i));
+            if (i != 5) ret.append(".");
+        }
+        return ret.toString();
     }
 }

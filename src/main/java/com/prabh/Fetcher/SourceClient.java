@@ -9,18 +9,26 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetBucketAclRequest;
 
-public class SourceApplication {
-    private final Logger logger = LoggerFactory.getLogger(SourceApplication.class);
+import java.util.concurrent.CountDownLatch;
+
+public class SourceClient {
+    private final Logger logger = LoggerFactory.getLogger(SourceClient.class);
     private final DownloadService downloadingService;
     private final ProducerService producerService;
+    private final CountDownLatch completion = new CountDownLatch(1);
 
-    private SourceApplication(Builder builder) {
-        FilePaths filePaths = new FilePaths(78439053, 43950834); // Have to fix this somehow
+    private SourceClient(Builder builder) {
+        FilePaths filePaths = new FilePaths(builder.startStamp.getStamp(), builder.endStamp.getStamp());
         this.producerService = new ProducerService(builder.produceTopic.name(), builder.bootstrapId, filePaths,
-                builder.producerThreadCount);
+                completion, builder.producerThreadCount);
         this.downloadingService = new DownloadService(builder.s3Client, builder.bucket, builder.consumeTopic,
                 builder.startStamp, builder.endStamp, producerService, builder.stream, filePaths,
                 builder.downloadThreadCount);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            Thread.currentThread().setName("Shutdown Hook");
+            shutdown();
+        }));
     }
 
     // Overwrites the local cached progress if present
@@ -39,8 +47,14 @@ public class SourceApplication {
     }
 
     public void shutdown() {
-        logger.warn("Source Application Shutdown Initiated");
-        downloadingService.shutdown(true);
+        downloadingService.forceShutdown();
+        try {
+            completion.await();
+        } catch (InterruptedException e) {
+            logger.error(e.getMessage());
+            throw new RuntimeException(e);
+        }
+        logger.warn("Application Shutdown Complete");
     }
 
     public static class Builder {
@@ -51,8 +65,8 @@ public class SourceApplication {
         private String bucket;
         private String bootstrapId;
         private NewTopic produceTopic;
-        private int producerThreadCount = 10;
         private int downloadThreadCount = 20;
+        private int producerThreadCount = 5;
         private boolean stream = false;
 
         public Builder() {
@@ -158,9 +172,9 @@ public class SourceApplication {
             }
         }
 
-        public SourceApplication build() {
+        public SourceClient build() {
             validate();
-            return new SourceApplication(this);
+            return new SourceClient(this);
         }
     }
 }
