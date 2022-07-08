@@ -266,7 +266,3 @@ app.start();
 > <b>[Click here](https://github.com/prabh1601/Kafka-Archiver/blob/LocalStorageBatching/src/main/java/com/prabh/CodeExamples/FetcherRun.java)
 > for complete code example</b>
 </details>
-
-## Contribution
-
-## License
