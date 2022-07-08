@@ -2,23 +2,26 @@
 
 ![](https://img.shields.io/badge/Made%20With-%20java-%23ED8B00.svg?style=for-the-badge&logo=java&logoColor=white)
 
-An application that helps to export data from Apache Kafka to Amazon S3 and also replay a certain period of data from s3 back to Kafka
+An application that helps to export data from Apache Kafka to Amazon S3 and also replay a certain period of data from s3
+back to Kafka
 
 ## Features
+
 The use case of this application are twofold
+
 1. Archive data from Kafka clusters to S3 buckets
 
-   - Use Gzip/Snappy for storing data in compressed format
-   - multiple concurrent Kafka-Consumers and S3-Uploads
-   - Store kafka records in form batches on Amazon S3
-   - multiple concurrent batching
-   - Exactly once delivery
+    - Use Gzip/Snappy for storing data in compressed format
+    - multiple concurrent Kafka-Consumers and S3-Uploads
+    - Store kafka records in form batches on Amazon S3
+    - multiple concurrent batching
+    - Exactly once delivery
 
 
 2. Retrieve data from S3 that belongs in between the input timeperiod and push it to Kafka cluster
-   - multiple concurrent Downloads and uploads
-   - Resume capabilites for a task
-   - Rejection Handler for rejected kafka records
+    - multiple concurrent Downloads and uploads
+    - Resume capabilites for a task
+    - Rejection Handler for rejected kafka records
 
 ## Getting Started
 
@@ -27,6 +30,7 @@ You can read [this blog]() to get a deep insights on how this application works
 ## Usage
 
 ### AWS Configurations
+
 The AWS user account accessing the S3 bucket must have the following permissions:
 
 - ListAllMyBuckets
@@ -51,12 +55,11 @@ AwsBasicCredentials awsCreds=AwsBasicCredentials.create(
         "your_access_key_id",
         "your_secret_access_key");
 
-S3Client s3=S3Client.builder()
+        S3Client s3=S3Client.builder()
         .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
         .region(<region>)
         .build();
 ```
-
 
 `Optional Retry Policy`
 
@@ -81,11 +84,11 @@ FullJitterBackoffStrategy backoffStrategy=FullJitterBackoffStrategy.builder()
         .build();
 
 // Same Code from previous block
-AwsBasicCredentials awsCreds=AwsBasicCredentials.create(
+        AwsBasicCredentials awsCreds=AwsBasicCredentials.create(
         "your_access_key_id",
         "your_secret_access_key");
 
-S3Client s3=S3Client.builder()
+        S3Client s3=S3Client.builder()
         .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
         .region(<region>)
         .overrideConfiguration(conf) // Overriding configuration
@@ -157,12 +160,13 @@ SinkApplication app=new SinkApplication.Builder()
         .subscribedTopics(List.of("testTopic"))
         .s3Builder(s3Client,"BUCKET-NAME")
         .compressionType(CompressionType.GZIP)
-        .consumerGroup()
+        .consumerGroup("GROUP-NAME")
         .build();
 ```
-> [Click Here](https://github.com/prabh1601/Kafka-Archiver/blob/LocalStorageBatching/src/main/java/com/prabh/CodeExamples/ArchiverRun.java) for complete code example
-</details>
 
+> [Click Here](https://github.com/prabh1601/Kafka-Archiver/blob/LocalStorageBatching/src/main/java/com/prabh/CodeExamples/ArchiverRun.java)
+> for complete code example
+</details>
 
 ### S3 Source Replayer</summary>
 
@@ -205,7 +209,7 @@ Check below sections for mandatory and optional parameters inorder to instantiat
 
 // Using epoch time in millis
 long start=1656757978015;
-        long end=1656758897543;
+long end=1656758897543;
 
 // Use FetchRequestRange to put time in calendar format
 // Format -> (year, month, day, hour, min) -> Any Valid prefix will work       
@@ -254,7 +258,7 @@ SourceApplication app=new SourceApplication.Builder()
 
 ```java
 // Overwrites if any previous cache available
-app.start();
+        app.start();
 
 // Resumes process using any previous local cache available
         app.resume();
