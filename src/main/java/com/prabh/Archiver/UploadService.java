@@ -43,6 +43,7 @@ public class UploadService {
         } catch (InterruptedException e) {
             logger.error(e.getMessage(), e);
         }
+        logger.warn("Upload Service Shutdown Complete");
     }
 
     public class UploadWorker implements Runnable {

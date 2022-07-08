@@ -1,5 +1,6 @@
 package com.prabh.Archiver;
 
+import TestingTools.TPSCalculator;
 import com.prabh.Utils.CompressionType;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -8,18 +9,24 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.util.Calendar;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class TopicPartitionWriter {
-    private final Logger logger = LoggerFactory.getLogger(TopicPartitionWriter.class);
+    private static final Logger logger = LoggerFactory.getLogger(TopicPartitionWriter.class);
     private final CompressionType compressionType;
     private final ConsumerRecord<String, String> leaderRecord;
-    private ConsumerRecord<String, String> latestRecord;
-    private int currentBatchSize = 0;
-    String localDumpLocation = String.format("%s/KafkaToS3", System.getProperty("java.io.tmpdir"));
-    private long startTime = System.currentTimeMillis();
     private final String filePath;
-    private final long maxBatchDurationInMillis = 5 * 60 * 1000; // 5 Min
-    private final long maxBatchSizeInBytes = 10 * 1024 * 1024; // 10 MB
+    private ConsumerRecord<String, String> latestRecord;
+    String localDumpLocation = String.format("%s/KafkaToS3", System.getProperty("java.io.tmpdir"));
+    private final long startTime = System.currentTimeMillis();
+    private boolean opened = false;
+    private long remBatchSizeInBytes = 10 * 1024 * 1024; // 10 MB
+    private static TPSCalculator tps = new TPSCalculator().start(5L, TimeUnit.SECONDS, new TPSCalculator.AbstractTPSCallback() {
+        @Override
+        public void tpsStat(TPSCalculator.TPSStat stat) {
+            logger.error("stats: " + stat.toString());
+        }
+    });
 
     public TopicPartitionWriter(ConsumerRecord<String, String> _leaderRecord, CompressionType _compressionType) {
         this.leaderRecord = _leaderRecord;
@@ -30,7 +37,6 @@ public class TopicPartitionWriter {
     }
 
     PrintWriter getWriter() {
-        System.out.println(filePath);
         try {
             new File(localDumpLocation).mkdirs();
             return new PrintWriter(
@@ -44,31 +50,33 @@ public class TopicPartitionWriter {
     }
 
     public void addToBuffer(List<ConsumerRecord<String, String>> records) {
+        opened = true;
         try (PrintWriter writer = getWriter()) {
             for (ConsumerRecord<String, String> record : records) {
                 writer.println(record.value());
-                currentBatchSize += (record.serializedValueSize() + 1);
+                tps.incrementOpCount();
+                remBatchSizeInBytes -= (record.serializedValueSize() + 1);
                 latestRecord = record;
             }
         }
     }
 
     long remainingSpace() {
-        return maxBatchSizeInBytes - currentBatchSize;
+        return remBatchSizeInBytes;
     }
 
     public boolean readyForCommit() {
-        if (currentBatchSize == 0) return false;
+        if (!opened) return false;
+
+        // Check Chunk Size
+        if (remBatchSizeInBytes <= 0) return true;
 
         // Check batch timegap  and batch open duration
         long timeGapInMillis = getLastTimeStamp() - getFirstTimeStamp();
         long durationInMillis = System.currentTimeMillis() - startTime;
-        if (Math.max(timeGapInMillis, durationInMillis) > maxBatchDurationInMillis) return true;
 
-        // Check Chunk Size
-        if (currentBatchSize > maxBatchSizeInBytes) return true;
-
-        return false;
+        long maxBatchDurationInMillis = 5 * 60 * 1000;
+        return Math.max(timeGapInMillis, durationInMillis) >= maxBatchDurationInMillis;
     }
 
     long getFirstTimeStamp() {

@@ -2,8 +2,6 @@ package com.prabh.Archiver;
 
 import com.prabh.Utils.AdminController;
 import com.prabh.Utils.CompressionType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -11,15 +9,12 @@ import software.amazon.awssdk.services.s3.model.GetBucketAclRequest;
 
 import java.util.List;
 
-public class SinkApplication {
-    private final Logger logger = LoggerFactory.getLogger(SinkApplication.class);
+public class SinkClient {
     private final ConsumerService consumerClient;
     private final WriteService writerClient;
     private final UploadService uploadClient;
-//    private final AdminController adminController;
 
-    private SinkApplication(Builder builder) {
-        // validate config parameters
+    private SinkClient(Builder builder) {
 
 //         Creating Uploader Client
         this.uploadClient = new UploadService(builder.s3Client, builder.bucket, builder.noOfUploads);
@@ -29,8 +24,14 @@ public class SinkApplication {
 
 //         Creating Consumer Client
         this.consumerClient = new ConsumerService(writerClient, builder.noOfConsumers, builder.groupName, builder.serverId, builder.subscribedTopics);
-    }
 
+
+//         shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            Thread.currentThread().setName("Shutdown Hook");
+            shutdown();
+        }));
+    }
 
     public void start() {
         consumerClient.start();
@@ -44,9 +45,9 @@ public class SinkApplication {
 
     public static class Builder {
         public String serverId;
-        public String groupName = "S3 Archiver";
+        public String groupName = "S3Archiver";
         public List<String> subscribedTopics;
-        public int noOfConsumers = 3;
+        public int noOfConsumers = 5;
         public int noOfSimultaneousWrites = 5;
         public int noOfUploads = 5;
         public S3Client s3Client;
@@ -87,7 +88,7 @@ public class SinkApplication {
         }
 
         // Make sure this topic Exists
-        public Builder subscribedTopic(String _topic) {
+        public Builder subscribedTopics(String _topic) {
             this.subscribedTopics = List.of(_topic);
             return this;
         }
@@ -143,9 +144,9 @@ public class SinkApplication {
             }
         }
 
-        public SinkApplication build() {
+        public SinkClient build() {
             validate();
-            return new SinkApplication(this);
+            return new SinkClient(this);
         }
     }
 }

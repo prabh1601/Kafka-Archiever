@@ -58,7 +58,7 @@ public class ConsumerService {
         } catch (InterruptedException e) {
             logger.error(e.getMessage(), e);
         }
-        logger.warn("Consumer Client Shutdown Complete");
+        logger.warn("Consumer Service Shutdown Complete");
     }
 
     private class ConsumerWorker extends Thread implements ConsumerRebalanceListener {
@@ -82,9 +82,9 @@ public class ConsumerService {
             consumerProperties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
             consumerProperties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
             consumerProperties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-//            consumerProperties.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 100 * 1024 * 1024);
-//            consumerProperties.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 20 * 1024 * 1024);
-//            consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, Integer.MAX_VALUE);
+//            consumerProperties.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, 50 * 1024 * 1024);
+            consumerProperties.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, 2 * 1024 * 1024);
+            consumerProperties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, Integer.MAX_VALUE);
             return new KafkaConsumer<>(consumerProperties);
         }
 
@@ -96,6 +96,7 @@ public class ConsumerService {
                 consumer.subscribe(subscribedTopics, this);
                 while (!stopped.get()) {
                     ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(2000));
+                    System.out.println("done");
                     if (!records.isEmpty()) {
                         log(records); // makes logs too messy : rather get some better method
                         handleFetchedRecords(records);

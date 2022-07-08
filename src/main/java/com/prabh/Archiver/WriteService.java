@@ -169,9 +169,7 @@ public class WriteService {
                     i++;
                     currentOffset.set(record.offset() + 1);
                 }
-                System.out.println("Batched");
                 addToBuffer(partition, batchedRecords);
-                System.out.println("Uploaded");
             }
             finished = true;
             completion.complete(currentOffset.get());
