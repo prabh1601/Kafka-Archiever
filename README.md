@@ -99,8 +99,8 @@ FullJitterBackoffStrategy backoffStrategy=FullJitterBackoffStrategy.builder()
 
 ### S3 Sink Archiver
 
-One can use `SinkApplication` API to instantiate the archiver object, which can be instantiated using the
-static `SinkApplication.Builder()` builder.
+One can use `SinkClient` API to instantiate the archiver object, which can be instantiated using the
+static `SinkClient.Builder()` builder.
 
 Check below for mandatory and optional parameters inroder to instantiate an object
 <details>
@@ -155,7 +155,7 @@ SinkClient app=new SinkClient.Builder()
 > One can use a subset of these fields as per requirements by just adding the builder method to the object build
 
 ```java
-SinkClient app=new SinkClie.Builder()
+SinkClient app=new SinkClient.Builder()
         .bootstrapServer("BOOTSTRAP-SERVER-ID")
         .subscribedTopics(List.of("testTopic"))
         .s3Builder(s3Client,"BUCKET-NAME")
@@ -170,8 +170,8 @@ SinkClient app=new SinkClie.Builder()
 
 ### S3 Source Replayer</summary>
 
-One can use `SourceApplication` API to instantiate the retrieval object,
-which can be instantiated using the static `SourceApplication.Builder()` builder.
+One can use `SourceClient` API to instantiate the retrieval object,
+which can be instantiated using the static `SourceClient.Builder()` builder.
 
 Check below sections for mandatory and optional parameters inorder to instantiate an object
 <details>
@@ -243,7 +243,7 @@ SourceClient app=new SourceClient.Builder()
 > One can use a subset of these fields as per requirements by just adding the builder method to the object build
 
 ```java
-SourceApplication app=new SourceApplication.Builder()
+SourceClient app=new SourceClient.Builder()
         .s3Builder(s3Client,"BUCKET","CONSUME-TOPIC")
         .kafkaBuilder("BOOTSTRAP-ID",new NewTopic("PRODUCE-TOPIC",<partitions>,(short)1))
         .range(start,end)
